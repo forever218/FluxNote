@@ -6,110 +6,150 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>轻笔记 - 记录生活</title>
     <link rel="stylesheet" href="/static/css/style.css">
-    <link rel="stylesheet" href="https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/lib/fontawesome/css/all.min.css">
     <!-- Markdown Support -->
-    <script src="https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/marked/12.0.1/marked.min.js"></script>
-    <script src="https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
+    <script src="/static/lib/marked/marked.min.js"></script>
+    <script src="/static/lib/dompurify/purify.min.js"></script>
     <!-- Syntax Highlighting -->
-    <link rel="stylesheet" href="https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
-    <script src="https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <script>hljs.highlightAll();</script>
+    <link rel="stylesheet" href="/static/lib/highlightjs/github.min.css">
+    <script src="/static/lib/highlightjs/highlight.min.js"></script>
+    
+    <!-- Mermaid Diagrams -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.0/mermaid.min.js"></script>
+
+    <script>
+        // Configure Marked
+        marked.use({
+            gfm: true,
+            breaks: true
+        });
+
+        // Configure Highlight.js
+        hljs.configure({ ignoreUnescapedHTML: true });
+        
+        // Configure Mermaid
+        document.addEventListener('DOMContentLoaded', () => {
+            if (typeof mermaid !== 'undefined') {
+                mermaid.initialize({ startOnLoad: false, theme: 'default' });
+            }
+        });
+    </script>
 
     <!-- Viewer.js for Image Zoom -->
-    <link rel="stylesheet" href="https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/viewerjs/1.11.6/viewer.min.css">
-    <script src="https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/viewerjs/1.11.6/viewer.min.js"></script>
+    <link rel="stylesheet" href="/static/lib/viewerjs/viewer.min.css">
+    <script src="/static/lib/viewerjs/viewer.min.js"></script>
 </head>
 <body>
     <div class="app-layout" id="appLayout">
         <div class="app-container">
             <!-- 侧边栏 -->
             <aside class="sidebar" id="sidebar">
-                <!-- 折叠按钮 (Hover显示) -->
+                <!-- Toggle Button -->
                 <button class="sidebar-toggle-btn" id="sidebarToggle" title="收起侧边栏">
-                    <i class="fas fa-bars"></i>
+                    <i class="fas fa-chevron-left"></i>
                 </button>
 
-                <!-- 1. 用户信息区 (改为极简) -->
-            <div class="user-profile-compact" id="userProfile" style="display:none;">
-                <div class="user-meta">
-                    <span class="username-large" id="userName">User</span>
-                    <span class="pro-badge">PRO</span>
-                </div>
-                <div class="user-actions-mini">
-                     <a href="/settings" title="设置"><i class="fas fa-cog"></i></a>
-                     <a href="#" id="logoutBtn" title="退出"><i class="fas fa-sign-out-alt"></i></a>
-                </div>
-            </div>
+                <!-- 1. 顶部：博客标题/用户信息 (访客看博客名，博主看自己信息) -->
+                <div class="sidebar-header">
+                   <div class="blog-brand" id="blogBrand">
+                       <h1 class="blog-title">轻笔记</h1>
+                       <p class="blog-desc">记录思维的碎片</p>
+                   </div>
 
-            <!-- 登录未登录状态处理 -->
-            <div id="authActions" class="auth-section">
-                <button id="showLoginBtn" class="btn btn-primary btn-block">登录 / 注册</button>
-            </div>
+                   <div class="user-profile-compact" id="userProfile" style="display:none;">
+                        <div class="user-meta">
+                            <span class="username-large" id="userName">User</span>
+                            <span class="pro-badge">OWNER</span>
+                        </div>
+                        <div class="user-actions-mini">
+                             <a href="#" id="bindWebAuthnBtn" title="绑定指纹/面容登录"><i class="fas fa-fingerprint"></i></a>
+                             <a href="/settings" title="设置"><i class="fas fa-cog"></i></a>
+                             <a href="#" id="logoutBtn" title="退出"><i class="fas fa-sign-out-alt"></i></a>
+                        </div>
+                   </div>
+                </div>
 
-            <!-- 2. 核心统计 & 热力图 (仿竞品) -->
-            <div class="stats-panel" id="statsSection" style="display:none;">
-                <div class="stats-row">
-                    <div class="stat-item">
-                        <span class="stat-num" id="statNoteCount">0</span>
-                        <span class="stat-label">笔记</span>
+                <!-- 2. 统计 & 热力图 (总是显示，作为博客装饰) -->
+                <div class="stats-panel" id="statsSection">
+                    <div class="stats-row">
+                        <div class="stat-item">
+                            <span class="stat-num" id="statNoteCount">0</span>
+                            <span class="stat-label">笔记</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-num" id="statTagCount">0</span>
+                            <span class="stat-label">标签</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-num" id="statDayCount">0</span>
+                            <span class="stat-label">活跃天</span>
+                        </div>
                     </div>
-                    <div class="stat-item">
-                        <span class="stat-num" id="statTagCount">0</span>
-                        <span class="stat-label">标签</span>
+                    <!-- 热力图 -->
+                    <div id="heatmapGrid" class="heatmap-grid-compact"></div>
+                </div>
+
+                <!-- 3. 导航菜单 -->
+                <nav class="sidebar-nav">
+                    <!-- 通用菜单 -->
+                    <a href="#" class="nav-item active" id="navAllNotes" onclick="return false;">
+                        <i class="fas fa-layer-group"></i> 全部内容
+                    </a>
+
+                    <!-- 博主专属菜单 (默认隐藏) -->
+                    <div id="ownerNav" style="display:none;">
+                        <a href="#" class="nav-item" onclick="return false;">
+                            <i class="fab fa-weixin"></i> 微信输入
+                        </a>
+                        <a href="#" class="nav-item" id="navDailyReview" onclick="return false;">
+                            <i class="fas fa-history"></i> 每日回顾
+                        </a>
+                        <a href="#" class="nav-item" id="navTrash" onclick="return false;">
+                            <i class="fas fa-trash"></i> 回收站
+                        </a>
                     </div>
-                    <div class="stat-item">
-                        <span class="stat-num" id="statDayCount">0</span>
-                        <span class="stat-label">记录天数</span>
+                </nav>
+
+                <!-- 4. 标签列表 -->
+                <div class="sidebar-section tags-section">
+                    <h3 class="section-title">话题 / 标签</h3>
+                    <div class="filter-tags-list">
+                        <!-- 动态加载 -->
                     </div>
                 </div>
-                <!-- 热力图 -->
-                <div id="heatmapGrid" class="heatmap-grid-compact"></div>
-            </div>
 
-            <!-- 3. 主导航 -->
-            <nav class="sidebar-nav">
-                <a href="#" class="nav-item active" id="navAllNotes" onclick="switchView('all'); return false;">
-                    <i class="fas fa-layer-group"></i> 全部笔记
-                </a>
-                <a href="#" class="nav-item" onclick="return false;">
-                    <i class="fab fa-weixin"></i> 微信输入
-                </a>
-                <a href="#" class="nav-item" onclick="return false;">
-                    <i class="fas fa-history"></i> 每日回顾
-                </a>
-                <a href="#" class="nav-item" id="navTrash" onclick="switchView('trash'); return false;">
-                    <i class="fas fa-trash"></i> 回收站
-                </a>
-            </nav>
-
-            <!-- 4. 标签列表 -->
-            <div class="sidebar-section tags-section">
-                <h3 class="section-title">全部标签</h3>
-                <div class="filter-tags-list">
-                    <!-- 动态加载 -->
+                <!-- 5. 底部低调的登录入口 -->
+                <div class="sidebar-footer" id="guestFooter" style="margin-top: auto; padding: 20px 0 0 0;">
+                    <a href="#" class="nav-item guest-login-btn" id="showLoginBtn" onclick="return false;">
+                        <i class="fas fa-fingerprint"></i> 博主登录
+                    </a>
+                    <!-- 隐藏注册按钮 -->
+                    <button id="showRegisterBtn" style="display:none;">注册</button>
                 </div>
-            </div>
             </aside>
 
             <!-- 主内容区 -->
             <main class="main-stream">
-            <!-- 顶部栏 (New) -->
+            <!-- 顶部栏 -->
             <header class="main-header">
                 <div class="header-left">
                     <button id="mobileMenuBtn" class="mobile-menu-btn" title="菜单"><i class="fas fa-bars"></i></button>
-                    <i class="fas fa-home"></i> <span class="divider">/</span> <span id="currentDateDisplay">2026-02-12</span>
+                    <span id="currentDateDisplay">...</span>
                 </div>
                 <div class="header-search">
                     <i class="fas fa-search"></i>
-                    <input type="text" id="searchInput" placeholder="搜索内容 (Ctrl+K)">
+                    <input type="text" id="searchInput" placeholder="搜索...">
                 </div>
             </header>
 
-            <!-- 笔记输入框 -->
-            <div id="loginPrompt" class="login-prompt" style="display:none;">
-                <i class="fas fa-lock"></i> 登录后开始记录
-            </div>
+            <!-- Banner 已移除，保持清爽 -->
+            <div id="welcomeSection" style="display:none;"></div>
 
+            <!-- 登录提示已移除 -->
+            <div id="authActions" style="display:none;"></div>
+            <div id="loginPrompt" style="display:none;"></div>
+
+            <!-- 笔记输入框 (仅登录可见) -->
             <div class="memo-editor" id="noteInputSection" style="display: none;">
                 <textarea id="noteContent" placeholder="现在的想法是..."></textarea>
 
@@ -138,7 +178,25 @@
 
             <!-- 笔记流 -->
             <div id="notesList" class="notes-stream">
-                <!-- 动态加载 -->
+                <!-- Static Skeleton for immediate feedback -->
+                <div class="note-card skeleton-card">
+                    <div class="skeleton-header" style="width: 30%;"></div>
+                    <div class="skeleton-content"></div>
+                    <div class="skeleton-content" style="width: 80%;"></div>
+                    <div class="skeleton-content" style="width: 60%;"></div>
+                </div>
+                <div class="note-card skeleton-card">
+                    <div class="skeleton-header" style="width: 30%;"></div>
+                    <div class="skeleton-content"></div>
+                    <div class="skeleton-content" style="width: 80%;"></div>
+                    <div class="skeleton-content" style="width: 60%;"></div>
+                </div>
+                <div class="note-card skeleton-card">
+                    <div class="skeleton-header" style="width: 30%;"></div>
+                    <div class="skeleton-content"></div>
+                    <div class="skeleton-content" style="width: 80%;"></div>
+                    <div class="skeleton-content" style="width: 60%;"></div>
+                </div>
             </div>
             </main>
         </div>
@@ -162,7 +220,12 @@
                 </div>
             </div>
             <div class="modal-footer" style="flex-direction: column; gap: 10px;">
-                <button id="authSubmitBtn" class="btn btn-primary btn-block">登录</button>
+                <div style="display:flex; gap:10px; width:100%;">
+                    <button id="authSubmitBtn" class="btn btn-primary" style="flex:1;">登录</button>
+                    <button id="webauthnLoginBtn" class="btn btn-secondary" title="使用指纹/面容登录" style="padding: 10px 15px;">
+                        <i class="fas fa-fingerprint"></i>
+                    </button>
+                </div>
                 <div class="auth-switch" style="text-align: center; font-size: 13px; color: #666;">
                     <span id="authSwitchText">没有账号？</span>
                     <a href="#" id="authSwitchBtn" style="color: var(--primary); font-weight: 600;">去注册</a>
@@ -187,6 +250,19 @@
         </div>
     </div>
 
-    <script src="/static/js/app.js"></script>
+    <!-- Daily Review Modal -->
+    <div id="reviewModal" class="modal">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <h2>每日回顾</h2>
+                <span class="close-review">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="reviewList" class="notes-stream"></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="/static/js/main.js"></script>
 </body>
 </html>

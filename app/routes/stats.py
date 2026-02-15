@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 stats_bp = Blueprint('stats', __name__)
 
 @stats_bp.route('/api/stats/heatmap', methods=['GET'])
-@login_required
 def get_heatmap_data():
     """
     Get note counts per day for the last 365 days.
@@ -17,18 +16,28 @@ def get_heatmap_data():
     end_date = datetime.now()
     start_date = end_date - timedelta(days=365)
 
-    # Query database
-    # Group by date(created_at) and count
-    # SQLite uses strftime for date formatting
     query = db.session.query(
         func.strftime('%Y-%m-%d', Note.created_at).label('date'),
         func.count(Note.id).label('count')
-    ).filter(
-        Note.user_id == current_user.id,
-        Note.created_at >= start_date
-    ).group_by(
-        'date'
-    ).all()
+    )
+
+    if current_user.is_authenticated:
+        # User's own notes + Public notes? Or just User's own?
+        # Usually heatmap tracks "My Activity".
+        # But if we want to fill the void, maybe just user's notes is fine for logged in.
+        # For anonymous, we show public notes activity.
+        query = query.filter(
+            Note.user_id == current_user.id,
+            Note.created_at >= start_date
+        )
+    else:
+        # Public activity
+        query = query.filter(
+            Note.is_public == True,
+            Note.created_at >= start_date
+        )
+
+    query = query.group_by('date').all()
 
     # Format result as a dictionary
     result = {row.date: row.count for row in query}
@@ -36,36 +45,42 @@ def get_heatmap_data():
     return jsonify(result)
 
 @stats_bp.route('/api/stats/overview', methods=['GET'])
-@login_required
 def get_overview():
     """
     Get overview stats: total notes, total tags, active days.
     """
-    # Total notes
-    total_notes = Note.query.filter_by(user_id=current_user.id).count()
+    if current_user.is_authenticated:
+        # Total notes
+        total_notes = Note.query.filter_by(user_id=current_user.id).count()
 
-    # Total tags (approximate or exact query)
-    # Since we use tags relationship now, we can query distinct tags for this user's notes
-    # But for performance/simplicity, let's just count unique tags used in notes
-    # OR if we have a user-tag relationship. We don't really. Tags are global or shared?
-    # Looking at models.py: Tag is global. Note-Tag is many-to-many.
-    # We should count tags associated with user's notes.
-    # query:
-    # select count(distinct tag_id) from note_tags join note on note.id = note_tags.note_id where note.user_id = ...
-    # SQLAlchemy way:
-    from app.models import note_tags, Tag
-    total_tags = db.session.query(func.count(func.distinct(note_tags.c.tag_id)))\
-        .join(Note, Note.id == note_tags.c.note_id)\
-        .filter(Note.user_id == current_user.id)\
-        .scalar()
+        # Total tags
+        from app.models import note_tags
+        total_tags = db.session.query(func.count(func.distinct(note_tags.c.tag_id)))\
+            .join(Note, Note.id == note_tags.c.note_id)\
+            .filter(Note.user_id == current_user.id)\
+            .scalar() or 0
 
-    # Active days (count of distinct dates created_at)
-    active_days = db.session.query(func.count(func.distinct(func.date(Note.created_at))))\
-        .filter(Note.user_id == current_user.id)\
-        .scalar()
+        # Active days
+        active_days = db.session.query(func.count(func.distinct(func.date(Note.created_at))))\
+            .filter(Note.user_id == current_user.id)\
+            .scalar() or 0
+
+    else:
+        # Public Stats
+        total_notes = Note.query.filter_by(is_public=True).count()
+
+        from app.models import note_tags
+        total_tags = db.session.query(func.count(func.distinct(note_tags.c.tag_id)))\
+            .join(Note, Note.id == note_tags.c.note_id)\
+            .filter(Note.is_public == True)\
+            .scalar() or 0
+
+        active_days = db.session.query(func.count(func.distinct(func.date(Note.created_at))))\
+            .filter(Note.is_public == True)\
+            .scalar() or 0
 
     return jsonify({
         'notes': total_notes,
-        'tags': total_tags or 0,
-        'days': active_days or 0
+        'tags': total_tags,
+        'days': active_days
     })

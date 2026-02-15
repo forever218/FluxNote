@@ -10,8 +10,47 @@ ai_bp = Blueprint('ai', __name__)
 def stream_ai():
     """Stream AI response"""
     data = request.json
+    action = data.get('action')
+    content = data.get('content') # If action is present, we expect content instead of prompt
+    
+    # Legacy/Direct prompt mode
     prompt = data.get('prompt')
-    system_prompt = data.get('system_prompt', '你是一个乐于助人的助手。')
+    system_prompt = data.get('system_prompt', '你是一位深思熟虑的笔记助手。请帮助我整理思绪，提取关键洞见，保持语言简洁客观。')
+
+    if action:
+        if not content:
+             return jsonify({'error': 'Content is required for actions'}), 400
+        
+        # Build prompt on server side
+        if action == 'polish':
+            from app.models import Config
+            styles_str = Config.get('polish_styles', '专业严谨,简洁明了,亲和力强')
+            styles = [s.strip() for s in styles_str.split(',') if s.strip()]
+            if not styles:
+                styles = ['专业严谨', '简洁明了', '亲和力强']
+            
+            style_instructions = ""
+            output_format = ""
+            for i, style in enumerate(styles, 1):
+                style_instructions += f"{i}. {style}\n"
+                output_format += f"### {style}\n(内容)\n"
+
+            prompt = f"""你是一个专业的文本编辑。请将以下文本润色为这{len(styles)}种风格：
+{style_instructions}
+严格按照以下格式输出润色后的内容，禁止包含任何开场白、解释或多余的空行：
+
+{output_format}
+待润色文本:
+{content[:2000]}"""
+            system_prompt = "你是一个只输出结果、不废话的编辑助手。"
+            
+        elif action == 'summary':
+             prompt = f"用约50-100字总结以下文本。保持简洁客观。只返回总结文本。\n\n文本:\n{content[:3000]}"
+             system_prompt = "你是一个精炼的总结助手。"
+             
+        elif action == 'tags':
+             prompt = f"分析以下文本并建议3-5个相关标签。只返回一个字符串的JSON数组，例如 [\"tag1\", \"tag2\"]。不要包含任何解释或Markdown格式。\n\n文本:\n{content[:2000]}"
+             system_prompt = "你是一个分类专家。"
 
     if not prompt:
         return jsonify({'error': 'Prompt is required'}), 400
@@ -89,7 +128,7 @@ def chat():
     """Generic chat endpoint for AI features"""
     data = request.json
     prompt = data.get('prompt')
-    system_prompt = data.get('system_prompt', '你是一个乐于助人的助手。')
+    system_prompt = data.get('system_prompt', '你是一位深思熟虑的笔记助手。请帮助我整理思绪，提取关键洞见，保持语言简洁客观。')
 
     if not prompt:
         return jsonify({'error': 'Prompt is required'}), 400

@@ -1,5 +1,5 @@
 from flask import Flask, send_from_directory
-from .extensions import db, login_manager, cors
+from .extensions import db, login_manager, cors, migrate
 from .models import User
 from .routes.auth import auth_bp
 from .routes.notes import notes_bp
@@ -7,6 +7,7 @@ from .routes.main import main_bp
 from .routes.settings import settings_bp
 from .routes.ai import ai_bp
 from .routes.stats import stats_bp
+from .routes.auth_webauthn import webauthn_bp
 import os
 from sqlalchemy import text, inspect
 
@@ -30,6 +31,7 @@ def create_app():
 
     # Initialize Extensions
     db.init_app(app)
+    migrate.init_app(app, db)
     login_manager.init_app(app)
     login_manager.login_view = 'auth.login'
     cors.init_app(app)
@@ -41,6 +43,7 @@ def create_app():
     # Register Blueprints
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(notes_bp, url_prefix='/api')
+    app.register_blueprint(webauthn_bp, url_prefix='/api/auth')
     app.register_blueprint(settings_bp)
     app.register_blueprint(ai_bp, url_prefix='/api')
     app.register_blueprint(stats_bp)
@@ -59,27 +62,5 @@ def create_app():
     # Initialize DB logic
     with app.app_context():
         db.create_all()
-        check_and_migrate_db(app)
 
     return app
-
-def check_and_migrate_db(app):
-    try:
-        inspector = inspect(db.engine)
-        if not inspector.has_table('note'):
-            return
-
-        columns = [c['name'] for c in inspector.get_columns('note')]
-
-        with db.engine.connect() as conn:
-            if 'title' not in columns:
-                print("Migrating: Adding title column")
-                conn.execute(text('ALTER TABLE note ADD COLUMN title VARCHAR(255) DEFAULT ""'))
-
-            if 'links' not in columns:
-                print("Migrating: Adding links column")
-                conn.execute(text('ALTER TABLE note ADD COLUMN links TEXT DEFAULT "[]"'))
-
-            conn.commit()
-    except Exception as e:
-        print(f"Migration warning: {e}")

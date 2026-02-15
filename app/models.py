@@ -22,6 +22,9 @@ class User(UserMixin, db.Model):
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(120), nullable=False)
+    
+    # WebAuthn Credentials
+    credentials = db.relationship('UserCredential', backref='user', lazy=True, cascade='all, delete-orphan')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -29,13 +32,23 @@ class User(UserMixin, db.Model):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
+class UserCredential(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=False)
+    credential_id = db.Column(db.LargeBinary, unique=True, nullable=False)
+    public_key = db.Column(db.LargeBinary, nullable=False)
+    sign_count = db.Column(db.Integer, default=0)
+    transports = db.Column(db.String(255)) # Store as comma-separated string
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
 class NoteReference(db.Model):
     __tablename__ = 'note_reference'
     source_id = db.Column(db.String(36), db.ForeignKey('note.id'), primary_key=True)
-    target_title = db.Column(db.String(255), primary_key=True, index=True) # Indexed for fast lookup
+    target_id = db.Column(db.String(36), db.ForeignKey('note.id'), primary_key=True)
     
-    # Relationship
-    source_note = db.relationship('Note', backref=db.backref('outgoing_references', cascade='all, delete-orphan'))
+    # Relationships
+    source_note = db.relationship('Note', foreign_keys=[source_id], backref=db.backref('outgoing_references', cascade='all, delete-orphan'))
+    target_note = db.relationship('Note', foreign_keys=[target_id], backref=db.backref('incoming_references', cascade='all, delete-orphan'))
 
 class NoteVersion(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -60,9 +73,6 @@ class Note(db.Model):
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     content = db.Column(db.Text, nullable=False)
     title = db.Column(db.String(255), default='')
-    links = db.Column(db.Text, default='[]') # Storing outgoing links as JSON string
-    # tags column is kept for backward compatibility/migration but deprecated in favor of relationship
-    tags = db.Column(db.Text, default='[]')
 
     created_at = db.Column(db.DateTime, default=datetime.now)
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
@@ -80,8 +90,13 @@ class Note(db.Model):
             'id': self.id,
             'content': self.content,
             'title': self.title,
-            'links': json.loads(self.links) if self.links else [],
-            'tags': [tag.name for tag in self.tags_list], # Use the relationship now
+            'links': [ref.target_note.title for ref in self.outgoing_references if ref.target_note],
+            'backlinks': [
+                {'id': ref.source_note.id, 'title': ref.source_note.title} 
+                for ref in self.incoming_references 
+                if ref.source_note and not ref.source_note.is_deleted
+            ],
+            'tags': [tag.name for tag in self.tags_list],
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
             'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S'),
             'user_id': self.user_id,

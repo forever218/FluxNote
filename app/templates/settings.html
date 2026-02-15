@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>设置 - 轻笔记</title>
     <link rel="stylesheet" href="/static/css/style.css">
-    <link rel="stylesheet" href="https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/lib/fontawesome/css/all.min.css">
 </head>
 <body>
     <div class="settings-container">
@@ -49,6 +49,17 @@
                     </button>
                 </div>
             </div>
+            
+            <div style="border-top: 1px solid #eee; margin: 20px 0;"></div>
+            
+            <div class="form-row">
+                <label>润色风格 (逗号分隔)</label>
+                <input type="text" id="polishStyles" placeholder="专业严谨, 简洁明了, 亲和力强">
+                <p class="help-text">定义“润色文本”功能生成的版本风格，用逗号分隔。</p>
+                <button class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="savePolishStyles()">
+                    保存风格配置
+                </button>
+            </div>
         </div>
 
         <!-- Custom Prompts Settings -->
@@ -91,10 +102,37 @@
         <div class="settings-section">
             <div class="section-title"><i class="fas fa-database"></i> 数据管理</div>
             <div class="form-row">
-                <p class="help-text">将所有笔记导出为 JSON 格式进行备份。</p>
+                <p class="help-text" style="margin-bottom: 10px;">将所有笔记导出为 JSON 格式进行备份。</p>
                 <button class="btn btn-outline" onclick="exportData()">
                     <i class="fas fa-file-export"></i> 导出所有数据
                 </button>
+            </div>
+            
+            <div style="border-top: 1px solid #eee; margin: 20px 0;"></div>
+            
+            <div class="form-row">
+                <div style="display:flex; align-items:center; justify-content:space-between;">
+                    <div>
+                        <div style="font-weight:600; font-size:14px;">保留历史版本</div>
+                        <p class="help-text" style="margin-top:4px;">关闭后，修改笔记时将不再产生新的历史记录。</p>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="keepHistoryToggle" onchange="toggleKeepHistory()">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+            </div>
+            
+            <div class="form-row" style="margin-top: 20px;">
+                <div style="display:flex; align-items:center; justify-content:space-between;">
+                    <div>
+                        <div style="font-weight:600; font-size:14px;">清除所有历史版本</div>
+                        <p class="help-text" style="margin-top:4px;">此操作将永久删除当前所有笔记的历史记录，不可恢复。</p>
+                    </div>
+                    <button class="btn btn-danger btn-sm" onclick="clearAllHistory()">
+                        <i class="fas fa-trash-alt"></i> 立即清除
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -415,11 +453,65 @@
 
                 if (data.site_title) document.getElementById('siteTitle').value = data.site_title;
                 if (data.site_desc) document.getElementById('siteDesc').value = data.site_desc;
-                if (data.ai_provider) document.getElementById('aiProvider').value = data.ai_provider;
-                // Don't show API key for security usually, or masked
+                if (data.polish_styles) document.getElementById('polishStyles').value = data.polish_styles;
+                
+                // History settings
+                const keepHistory = data.keep_history !== 'false'; // Default to true
+                document.getElementById('keepHistoryToggle').checked = keepHistory;
             } catch (error) {
                 console.error('Failed to load settings');
             }
+        }
+
+        async function toggleKeepHistory() {
+            const enabled = document.getElementById('keepHistoryToggle').checked;
+            try {
+                const response = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ keep_history: enabled })
+                });
+                if (response.ok) {
+                    showToast(enabled ? '历史版本功能已启用' : '历史版本功能已禁用');
+                } else {
+                    showToast('设置失败');
+                    document.getElementById('keepHistoryToggle').checked = !enabled;
+                }
+            } catch (e) {
+                showToast('网络错误');
+                document.getElementById('keepHistoryToggle').checked = !enabled;
+            }
+        }
+
+        async function clearAllHistory() {
+            if (!confirm('确定要清除所有笔记的历史版本吗？此操作无法撤销。')) return;
+            
+            try {
+                const response = await fetch('/api/notes/history/clear_all', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    showToast(`清理成功，共删除 ${data.count} 条记录`);
+                } else {
+                    showToast('清理失败');
+                }
+            } catch (e) {
+                showToast('网络错误');
+            }
+        }
+
+        async function savePolishStyles() {
+            const styles = document.getElementById('polishStyles').value;
+            try {
+                const response = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ polish_styles: styles })
+                });
+                if (response.ok) showToast('风格配置已保存');
+                else showToast('保存失败');
+            } catch(e) { showToast('保存失败'); }
         }
 
         async function saveBasicSettings() {

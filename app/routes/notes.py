@@ -31,15 +31,39 @@ def update_note_tags(note, tag_names):
             note.tags_list.append(tag)
 
 def update_note_references(note, links_list):
-    """Helper to update backlinks (NoteReference)"""
+    """Helper to update outgoing references (NoteReference) using IDs"""
     # Remove old references
     NoteReference.query.filter_by(source_id=note.id).delete()
     
-    # Add new references
-    # Use set to avoid duplicates
-    for title in set(links_list):
-        ref = NoteReference(source_id=note.id, target_title=title)
+    if not links_list:
+        return
+
+    # Find IDs for these titles
+    # We link to any existing note that matches the title
+    target_notes = Note.query.filter(Note.title.in_(links_list), Note.is_deleted == False).all()
+    
+    for target in target_notes:
+        # Use set to avoid duplicates if multiple notes have same title (though not ideal)
+        # or if content has multiple links to same title
+        ref = NoteReference(source_id=note.id, target_id=target.id)
         db.session.add(ref)
+
+@notes_bp.route('/notes/review', methods=['GET'])
+@login_required
+def daily_review():
+    """Get random notes for daily review"""
+    try:
+        # Get random 3-5 notes from the past
+        # SQLite random order
+        query = Note.query.filter(
+            Note.user_id == current_user.id,
+            Note.is_deleted == False
+        ).order_by(func.random()).limit(5)
+        
+        notes = query.all()
+        return jsonify([note.to_dict() for note in notes])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @notes_bp.route('/notes', methods=['GET'])
 def get_notes():
@@ -99,19 +123,15 @@ def get_note_titles():
 
 @notes_bp.route('/notes/<note_id>/backlinks', methods=['GET'])
 def get_backlinks(note_id):
-    """Get backlinks for a note using optimized NoteReference table"""
+    """Get backlinks for a note using ID-based NoteReference table"""
     try:
         target_note = db.session.get(Note, note_id)
         if not target_note:
             return jsonify({'error': 'Note not found'}), 404
 
-        target_title = target_note.title
-        if not target_title:
-             return jsonify([])
-
-        # Efficient Query: Find all notes that reference this title
+        # Efficient Query: Find all notes that reference this note ID
         query = db.session.query(Note).join(NoteReference, NoteReference.source_id == Note.id)\
-            .filter(NoteReference.target_title == target_title)\
+            .filter(NoteReference.target_id == note_id)\
             .filter(Note.is_deleted == False)
 
         if current_user.is_authenticated:
@@ -169,9 +189,6 @@ def create_note():
         new_note = Note(
             content=content,
             title=title,
-            links=json.dumps(links, ensure_ascii=False),
-            # tags column is deprecated, we update relation below
-            tags=json.dumps(tags, ensure_ascii=False), # Keep for backup if needed, or set empty
             user_id=current_user.id,
             is_public=is_public
         )
@@ -179,7 +196,7 @@ def create_note():
         # Update Tags Relation
         update_note_tags(new_note, tags)
         
-        # Update Backlinks Relation (New)
+        # Update Backlinks Relation (ID-based)
         update_note_references(new_note, links)
 
         db.session.add(new_note)
@@ -230,7 +247,10 @@ def update_note(note_id):
             return jsonify({'error': '无权修改此笔记'}), 403
 
         # === Create Version History ===
-        if note.content != content:
+        from app.models import Config
+        keep_history = Config.get('keep_history', 'true') == 'true'
+
+        if keep_history and note.content != content:
             version = NoteVersion(
                 note_id=note.id,
                 content=note.content,
@@ -243,15 +263,13 @@ def update_note(note_id):
 
         note.content = content
         note.title = title
-        note.links = json.dumps(links, ensure_ascii=False)
-        note.tags = json.dumps(tags, ensure_ascii=False) # Keep legacy column sync for now
         note.is_public = is_public
         note.updated_at = datetime.now()
 
         # Update Tags Relation
         update_note_tags(note, tags)
         
-        # Update Backlinks Relation (New)
+        # Update Backlinks Relation (ID-based)
         update_note_references(note, links)
 
         db.session.commit()
@@ -305,7 +323,6 @@ def restore_note_version(note_id, version_id):
         
         # Re-extract links
         title, links = extract_title_and_links(note.content)
-        note.links = json.dumps(links, ensure_ascii=False)
         update_note_references(note, links)
         
         db.session.commit()
@@ -394,12 +411,15 @@ def get_trash_notes():
 
 @notes_bp.route('/notes/search', methods=['GET'])
 def search_notes():
-    """Search notes"""
+    """Search notes with manual pagination and multi-keyword support"""
     try:
-        keyword = request.args.get('keyword', '').strip()
+        from app.utils import strip_markdown_for_search
+        keyword_input = request.args.get('keyword', '').strip()
         tag = request.args.get('tag', '').strip()
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
 
-        if not keyword and not tag:
+        if not keyword_input and not tag:
             return get_notes()
 
         query = Note.query.filter(Note.is_deleted == False)
@@ -410,35 +430,80 @@ def search_notes():
         else:
             query = query.filter(Note.is_public == True)
 
-        if keyword:
-            query = query.filter(Note.content.contains(keyword))
-
         # Optimized Tag Search
         if tag:
             query = query.join(Note.tags_list).filter(Tag.name == tag)
 
-        results = query.order_by(Note.created_at.desc()).all()
+        if keyword_input:
+            keywords = keyword_input.split()
+            
+            # SQL level filter: AND logic for all keywords
+            # Each keyword must match (Title OR Content)
+            for k in keywords:
+                query = query.filter(db.or_(Note.content.contains(k), Note.title.contains(k)))
+            
+            # Order by creation date descending
+            query = query.order_by(Note.created_at.desc())
+            
+            # Fetch ALL candidates
+            candidates = query.all()
+            
+            # Filter in Python (strip markdown/URLs)
+            filtered_notes = []
+            
+            for note in candidates:
+                note_title_lower = note.title.lower()
+                searchable_content_lower = strip_markdown_for_search(note.content).lower()
+                
+                # Check if ALL keywords are present in either title or stripped content
+                all_keywords_match = True
+                for k in keywords:
+                    k_lower = k.lower()
+                    if k_lower not in note_title_lower and k_lower not in searchable_content_lower:
+                        all_keywords_match = False
+                        break
+                
+                if all_keywords_match:
+                    filtered_notes.append(note)
+            
+            # Manual Pagination
+            total_items = len(filtered_notes)
+            total_pages = (total_items + per_page - 1) // per_page
+            start = (page - 1) * per_page
+            end = start + per_page
+            
+            paginated_notes = filtered_notes[start:end]
+            has_next = end < total_items
+            
+            return jsonify({
+                'notes': [note.to_dict() for note in paginated_notes],
+                'total': total_items,
+                'pages': total_pages,
+                'current_page': page,
+                'has_next': has_next
+            })
 
-        return jsonify([note.to_dict() for note in results])
+        else:
+            # Tag only search (Standard SQL Pagination)
+            pagination = query.order_by(Note.created_at.desc()).paginate(
+                page=page, per_page=per_page, error_out=False
+            )
+            return jsonify({
+                'notes': [note.to_dict() for note in pagination.items],
+                'total': pagination.total,
+                'pages': pagination.pages,
+                'current_page': page,
+                'has_next': pagination.has_next
+            })
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @notes_bp.route('/tags', methods=['GET'])
 def get_tags():
-    """Get all unique tags"""
+    """Get all unique tags associated with accessible notes"""
     try:
-        # Improved: Fetch from Tag table directly
-        # However, we might only want tags that are used in visible notes.
-        # For simplicity and performance, showing all tags is usually fine,
-        # but technically we should filter.
-
-        # If we want strictly visible tags:
-        # query = db.session.query(Tag.name).join(Note.tags_list)
-        # Apply auth filters on Note...
-        # distinct()...
-
-        # Let's stick to the simple approach first (all tags), or the safe approach (visible only)
-        # Safe approach:
+        # Fetch only tags that belong to visible, non-deleted notes
         query = db.session.query(Tag.name).join(Note.tags_list).filter(Note.is_deleted == False)
         if current_user.is_authenticated:
              query = query.filter(db.or_(Note.is_public == True, Note.user_id == current_user.id))
@@ -448,4 +513,18 @@ def get_tags():
         tags = [r[0] for r in query.distinct().order_by(Tag.name).all()]
         return jsonify(tags)
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@notes_bp.route('/notes/history/clear_all', methods=['POST'])
+@login_required
+def clear_all_history():
+    """Delete all note versions for the current user"""
+    try:
+        # Join with Note to ensure we only delete current user's history
+        subquery = db.session.query(Note.id).filter(Note.user_id == current_user.id).subquery()
+        num_deleted = db.session.query(NoteVersion).filter(NoteVersion.note_id.in_(subquery)).delete(synchronize_session=False)
+        db.session.commit()
+        return jsonify({'success': True, 'count': num_deleted})
+    except Exception as e:
+        db.session.rollback()
         return jsonify({'error': str(e)}), 500

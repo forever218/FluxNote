@@ -114,11 +114,25 @@ class AIService:
     @staticmethod
     def polish_text(content):
         """Polish and improve the text"""
+        # Load styles from config or use default
+        styles_str = Config.get('polish_styles', '专业严谨,简洁明了,亲和力强')
+        styles = [s.strip() for s in styles_str.split(',') if s.strip()]
+        
+        # Build style section of prompt
+        style_instructions = ""
+        output_format = ""
+        
+        for i, style in enumerate(styles, 1):
+            style_instructions += f"{i}. **{style}**\n"
+            output_format += f"### {style}\n(内容)\n\n"
+
         prompt = f"""
-        重写以下文本，使其更清晰、简洁、专业。
-        修正任何语法或拼写错误。
-        保持原意。
-        只返回重写后的文本。
+        你是专业的文本润色编辑。请对以下文本提供{len(styles)}个不同风格的优化版本：
+        {style_instructions}
+
+        请严格按照以下Markdown格式输出，不要包含任何开场白或结束语：
+
+        {output_format}
 
         文本:
         {content[:2000]}

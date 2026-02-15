@@ -1,74 +1,70 @@
+# 轻笔记 (Light Note Blog) - 个人知识库 & 灵感捕捉
 
-# 轻笔记 - 简单记录生活
+一个受 Flomo 启发的轻量级、智能化的个人笔记应用。旨在提供极致的“零摩擦”记录体验，并结合 AI 技术辅助知识整理。
 
-一个基于Flask和H5开发的轻量级笔记应用，灵感来源于Flomo。支持记录想法、添加标签、搜索和编辑笔记，界面简洁美观，适配移动端。
+## 🌟 核心功能
 
-## 功能特点
+- 🚀 **快速捕捉**：极简的输入界面，支持快捷标签和图片粘贴。
+- 🧠 **双向链接**：支持 `[[Wiki链接]]` 语法，自动生成反向链接 (Backlinks)，构建个人知识网络。
+- 🤖 **AI 助手**：集成流式 AI 接口，支持自动生成标签、内容摘要、文本润色及自定义 Prompt。
+- 🔐 **生物识别登录**：支持 WebAuthn 登录，完美支持Windows Hello，兼顾安全与便捷。
+- 📜 **版本控制**：记录笔记的每一次修改，支持随时回滚历史版本。
+- 📊 **可视化统计**：支持贡献热力图 (Heatmap) 和全站数据概览。
+- 📱 **全平台适配**：响应式设计，完美适配 PC、平板和手机浏览器。
 
-- 📝 快速记录想法
-- 🏷️ 支持标签分类
-- 🔍 关键词搜索
-- 📱 响应式设计，适配移动端
-- ✏️ 编辑和删除笔记
-- 🎨 简洁美观的界面
+## 🛠️ 技术栈
 
-## 技术栈
+- **后端**: Python (Flask) + SQLAlchemy
+- **数据库**: SQLite (支持通过 Alembic 进行数据库迁移)
+- **前端**: 原生 JavaScript (模块化设计) + CSS3 (变量化主题)
+- **外部依赖**: OpenAI API (或兼容接口), WebAuthn, Marked.js (Markdown渲染), Mermaid.js (图表)
 
-- 后端：Flask (Python)
-- 前端：HTML5, CSS3, JavaScript
-- 数据存储：JSON文件
+## 🚀 快速开始
 
-## 安装与运行
-
-### 1. 克隆项目
-
-```bash
-git clone [项目地址]
-cd 轻笔记博客
-```
+### 1. 环境准备
+确保已安装 Python 3.8+。
 
 ### 2. 安装依赖
-
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. 运行应用
-
-```bash
-python app.py
+### 3. 配置环境
+创建 `.env` 文件并配置以下内容（可选）：
+```
+SECRET_KEY=你的密钥
+PORT=5001
 ```
 
-### 4. 访问应用
+### 4. 运行应用
+- **开发模式**:
+```bash
+python run.py
+```
+- **生产模式**:
+```bash
+python server.py
+```
 
-在浏览器中打开 `http://localhost:5000`
+访问 `http://localhost:5001` 即可开始使用。
 
-## 使用说明
-
-1. **添加笔记**：在输入框中输入你的想法，可以按回车添加标签，然后点击"发布"按钮保存笔记。
-2. **编辑笔记**：点击笔记卡片上的"编辑"按钮，在弹出的对话框中修改内容和标签。
-3. **删除笔记**：点击笔记卡片上的"删除"按钮，确认后即可删除笔记。
-4. **搜索笔记**：在搜索框中输入关键词，系统会实时搜索匹配的笔记。
-5. **标签筛选**：点击标签按钮可以筛选带有该标签的笔记。
-
-## 项目结构
+## 📁 项目结构
 
 ```
 轻笔记博客/
-├── app.py                 # Flask应用主文件
-├── templates/             # HTML模板目录
-│   └── index.html         # 主页模板
-├── static/                # 静态文件目录
-│   ├── css/               # CSS样式目录
-│   │   └── style.css      # 主样式文件
-│   └── js/                # JavaScript目录
-│       └── app.js         # 前端逻辑文件
-├── data/                  # 数据目录
-│   └── notes.json         # 笔记数据文件
-├── requirements.txt       # Python依赖
-└── README.md             # 项目说明文档
+├── app/                  # 应用核心代码
+│   ├── routes/           # 路由 (Auth, Notes, AI, Stats等)
+│   ├── services/         # 业务逻辑 (AI Service)
+│   ├── models.py         # 数据库模型
+│   ├── static/           # 静态资源 (CSS, JS Modules)
+│   └── templates/        # HTML 模板
+├── data/                 # 数据库文件 (notes.db)
+├── migrations/           # 数据库迁移脚本
+├── uploads/              # 用户上传的图片
+├── run.py                # 开发环境启动脚本
+└── server.py             # 生产环境启动脚本 (Waitress)
 ```
 
-## 许可证
+## 📝 许可证
 
 MIT License
