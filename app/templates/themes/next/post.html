@@ -1,0 +1,58 @@
+{% extends "themes/next/base.html" %}
+
+{% block meta %}
+<meta name="description" content="{{ note.get_excerpt(160) }}">
+<meta property="og:title" content="{{ note.title or '无标题' }}">
+<meta property="og:description" content="{{ note.get_excerpt(160) }}">
+<meta property="og:type" content="article">
+{% endblock %}
+
+{% block title %}{{ note.title or '无标题' }} | {{ site_title }}{% endblock %}
+
+{% block content %}
+<div class="next-container">
+    <article class="next-article">
+        <header class="next-article-header">
+            <h1 class="next-article-title">{{ note.title or '无标题' }}</h1>
+            <div class="next-article-meta">
+                <time>
+                    <i class="far fa-calendar"></i>
+                    {{ note.created_at.strftime('%Y-%m-%d') }}
+                </time>
+                <span>
+                    <i class="far fa-clock"></i>
+                    {{ note.reading_time }} min read
+                </span>
+                {% if note.updated_at != note.created_at %}
+                <span>
+                    <i class="far fa-edit"></i>
+                    {{ note.updated_at.strftime('%Y-%m-%d') }}
+                </span>
+                {% endif %}
+            </div>
+        </header>
+
+        <div class="next-article-content markdown-body" id="postContent">
+            {{ note.render_html() | safe }}
+        </div>
+
+        {% if note.tags_list %}
+        <footer class="next-article-footer">
+            <div class="next-article-tags">
+                {% for tag in note.tags_list %}
+                <a href="{{ url_for('blog.tag_notes', tag_name=tag.name) }}" class="next-tag">
+                    #{{ tag.name }}
+                </a>
+                {% endfor %}
+            </div>
+        </footer>
+        {% endif %}
+    </article>
+
+    <nav class="next-article-nav">
+        <a href="{{ url_for('blog.index') }}">
+            <i class="fas fa-angle-left"></i> 返回首页
+        </a>
+    </nav>
+</div>
+{% endblock %}

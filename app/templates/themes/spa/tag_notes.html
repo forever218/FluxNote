@@ -1,0 +1,168 @@
+{% extends "themes/spa/base.html" %}
+
+{% block title %}#{{ tag_name }} - {{ site_title }}{% endblock %}
+
+{% block content %}
+<!-- 顶部栏 -->
+<header class="main-header">
+    <div class="header-left">
+        <button id="mobileMenuBtn" class="mobile-menu-btn" title="菜单"><i class="fas fa-bars"></i></button>
+        <span id="currentDateDisplay">{{ today }}</span>
+    </div>
+    <div class="header-search">
+        <i class="fas fa-search"></i>
+        <input type="text" id="searchInput" placeholder="搜索..." value="{{ search }}">
+    </div>
+</header>
+
+<!-- 标签筛选横幅 -->
+<div class="filter-banner">
+    <span><i class="fas fa-tag"></i> 正在查看标签 <b>#{{ tag_name }}</b> 的笔记 ({{ notes|length }})</span>
+    <a href="{{ url_for('blog.tags') }}" class="clear-filter-btn" title="返回标签列表"><i class="fas fa-times"></i></a>
+</div>
+
+<!-- 笔记流 -->
+<div id="notesList" class="notes-stream">
+    {% if notes %}
+        {% for note in notes %}
+        <div class="note-card" data-note-id="{{ note.id }}">
+            <div class="note-header-row">
+                 <div class="note-meta-left">
+                    <span class="note-date-badge" data-timestamp="{{ note.created_at.isoformat() }}">
+                        {{ note.created_at.strftime('%m-%d') }}
+                    </span>
+                    <span class="note-time-label">{{ note.created_at.strftime('%H:%M') }}</span>
+                 </div>
+                 <div class="note-actions-right">
+                    <a href="{{ url_for('blog.post', note_id=note.id) }}" class="permalink-btn" title="查看详情"><i class="fas fa-external-link-alt"></i></a>
+                 </div>
+            </div>
+
+            <!-- 原始内容存储 (Hidden) -->
+            <script type="text/markdown" id="raw-content-{{ note.id }}">{{ note.content }}</script>
+            
+            <div class="note-content-wrapper">
+                <div class="note-content markdown-body" id="note-render-{{ note.id }}">
+                    <div class="loading-placeholder">
+                        <i class="fas fa-spinner fa-spin"></i> 加载中...
+                    </div>
+                </div>
+                <!-- 展开/收起 遮罩 -->
+                <div class="read-more-overlay" id="overlay-{{ note.id }}">
+                    <button class="read-more-btn" onclick="toggleNote('{{ note.id }}')">
+                        <i class="fas fa-chevron-down"></i> 展开全文
+                    </button>
+                </div>
+            </div>
+            
+            {% if note.tags_list %}
+            <div class="note-footer">
+                <div class="note-tags">
+                    {% for tag in note.tags_list %}
+                    <span class="note-tag{% if tag.name == tag_name %} active-tag{% endif %}" data-tag="{{ tag.name }}">#{{ tag.name }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="note-card empty-card">
+            <div class="empty-state">
+                <i class="far fa-file-alt"></i>
+                <p>该标签下暂无公开笔记</p>
+                <a href="{{ url_for('blog.tags') }}" class="btn-reset">返回标签列表</a>
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+import { renderContent } from '/static/js/markdown-renderer.js';
+import spaLoader from '/static/js/spa-loader.js';
+
+// 渲染所有笔记内容
+async function renderAllNotes() {
+    const notes = document.querySelectorAll('.note-card[data-note-id]');
+    for (const note of notes) {
+        const id = note.dataset.noteId;
+        const rawContainer = document.getElementById(`raw-content-${id}`);
+        const targetContainer = document.getElementById(`note-render-${id}`);
+        const overlay = document.getElementById(`overlay-${id}`);
+
+        if (!rawContainer || !targetContainer) continue;
+
+        const wrapper = targetContainer.parentElement;
+        const content = rawContainer.textContent;
+
+        await renderContent(targetContainer, content, {
+            skipFirstH1: true,
+            enableViewer: true,
+            enableMermaid: false,
+            enableHighlight: true
+        });
+
+        if (targetContainer.scrollHeight > 400) {
+            wrapper.classList.add('collapsed');
+            overlay.style.display = 'flex';
+        } else {
+            overlay.style.display = 'none';
+        }
+    }
+}
+
+window.toggleNote = function(id) {
+    const wrapper = document.getElementById(`note-render-${id}`).parentElement;
+    const overlay = document.getElementById(`overlay-${id}`);
+    const btn = overlay.querySelector('.read-more-btn');
+
+    if (wrapper.classList.contains('collapsed')) {
+        wrapper.classList.remove('collapsed');
+        wrapper.classList.add('expanded');
+        btn.innerHTML = '<i class="fas fa-chevron-up"></i> 收起';
+        overlay.classList.add('expanded-mode');
+    } else {
+        wrapper.classList.add('collapsed');
+        wrapper.classList.remove('expanded');
+        btn.innerHTML = '<i class="fas fa-chevron-down"></i> 展开全文';
+        overlay.classList.remove('expanded-mode');
+        wrapper.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+}
+
+function initSearch() {
+    const searchInput = document.getElementById('searchInput');
+    searchInput?.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            const query = e.target.value.trim();
+            spaLoader.navigate('{{ url_for("blog.index") }}' + (query ? '?search=' + encodeURIComponent(query) : ''));
+        }
+    });
+}
+
+function initTagClicks() {
+    document.querySelectorAll('.note-tag[data-tag]').forEach(tag => {
+        tag.replaceWith(tag.cloneNode(true));
+    });
+    document.querySelectorAll('.note-tag[data-tag]').forEach(tag => {
+        tag.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const tagName = tag.dataset.tag;
+            spaLoader.navigate('{{ url_for("blog.tags") }}/' + encodeURIComponent(tagName));
+        });
+    });
+}
+
+function initPage() {
+    renderAllNotes();
+    initSearch();
+    initTagClicks();
+}
+
+document.addEventListener('DOMContentLoaded', initPage);
+window.addEventListener('page-ready', initPage);
+</script>
+{% endblock %}

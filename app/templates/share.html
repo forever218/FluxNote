@@ -13,7 +13,7 @@
     <!-- Syntax Highlighting -->
     <link rel="stylesheet" href="/static/lib/highlightjs/github.min.css">
     <script src="/static/lib/highlightjs/highlight.min.js"></script>
-    
+
     <!-- Mermaid Diagrams -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.0/mermaid.min.js"></script>
 
@@ -22,95 +22,14 @@
     <script src="/static/lib/viewerjs/viewer.min.js"></script>
 
     <link rel="stylesheet" href="/static/css/share.css">
-    <script>
-        marked.use({ gfm: true, breaks: true });
-        hljs.configure({ ignoreUnescapedHTML: true });
-        
-        // Initialize Mermaid
-        document.addEventListener('DOMContentLoaded', () => {
-            if (typeof mermaid !== 'undefined') {
-                mermaid.initialize({ startOnLoad: false, theme: 'default' });
-            }
-        });
-        
-        // Helper: Parse WikiLinks
-        function parseWikiLinks(content) {
-            if (!content) return '';
-            return content.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (match, title, display) => {
-                return `<span class="wiki-link" title="${title.trim()}">${(display || title).trim()}</span>`;
-            });
-        }
-        
-        // Helper: Render Content Pipeline
-        async function renderContent(container, content) {
-            if (!container || !content) return;
-            
-            try {
-                // 1. Wiki Links
-                let processed = parseWikiLinks(content);
-                
-                // 2. Markdown
-                let html = marked.parse(processed);
-                
-                // 3. Sanitize
-                if (typeof DOMPurify !== 'undefined') {
-                    html = DOMPurify.sanitize(html);
-                }
-                
-                container.innerHTML = html;
-                
-                // 4. Render Mermaid
-                if (typeof mermaid !== 'undefined') {
-                    const blocks = container.querySelectorAll('pre code.language-mermaid, pre code.language-mindmap');
-                    const nodesToRender = [];
-                    
-                    blocks.forEach(block => {
-                        const isMindmap = block.classList.contains('language-mindmap');
-                        let rawCode = block.textContent;
-                        if (isMindmap && !rawCode.trim().startsWith('mindmap')) {
-                            rawCode = 'mindmap\n' + rawCode;
-                        }
-                        
-                        const pre = block.parentElement;
-                        const div = document.createElement('div');
-                        div.className = 'mermaid';
-                        div.textContent = rawCode;
-                        
-                        if (pre && pre.parentNode) {
-                            pre.parentNode.replaceChild(div, pre);
-                            nodesToRender.push(div);
-                        }
-                    });
-                    
-                    if (nodesToRender.length > 0) {
-                        try {
-                            await mermaid.run({ nodes: nodesToRender });
-                        } catch (e) {
-                            console.error('Mermaid error:', e);
-                        }
-                    }
-                }
-                
-                // 5. Highlight Code
-                container.querySelectorAll('pre code').forEach(block => {
-                    if (!block.classList.contains('language-mermaid') && !block.classList.contains('language-mindmap')) {
-                        hljs.highlightElement(block);
-                    }
-                });
-                
-                // 6. Viewer.js for Images
-                if (typeof Viewer !== 'undefined') {
-                    new Viewer(container, {
-                        button: true, navbar: false, title: false,
-                        toolbar: { zoomIn:1, zoomOut:1, oneToOne:1, reset:1 }
-                    });
-                }
-                
-            } catch (e) {
-                console.error('Rendering failed:', e);
-                container.textContent = content;
-            }
-        }
+
+    <!-- Markdown Renderer Module -->
+    <script type="module">
+        import { renderContent, initMarkdownRenderer } from '/static/js/markdown-renderer.js';
+        initMarkdownRenderer();
+        window.renderContent = renderContent;
+        window._markdownRendererReady = true;
+        window.dispatchEvent(new Event('markdown-renderer-ready'));
     </script>
 </head>
 <body>
@@ -201,11 +120,6 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    // Render Note Content logic
-                    // We need to reload or replace content. 
-                    // Since we refactored the HTML structure, replacing innerHTML of a specific container is cleaner.
-                    // But simpler here is to reload the page with a token or just handle it purely in JS by replacing the card content.
-                    
                     const cardContainer = document.querySelector('.share-card-container');
                     const note = data.note;
                     const dateStr = new Date(note.created_at).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -221,7 +135,7 @@
                                     ${dateStr}
                                 </div>
                             </header>
-                            
+
                             <div class="share-note-content markdown-body" id="noteContent"></div>
 
                             ${note.tags && note.tags.length > 0 ? `
@@ -232,9 +146,10 @@
                         </article>
                     `;
 
-                    // Async render content
-                    await renderContent(document.getElementById('noteContent'), note.content);
-
+                    // 等待渲染器就绪后渲染内容
+                    if (window.renderContent) {
+                        await window.renderContent(document.getElementById('noteContent'), note.content);
+                    }
                 } else {
                     errorEl.textContent = data.error || '密码错误';
                     errorEl.style.display = 'block';
@@ -257,17 +172,22 @@
     <!-- Use a script tag to store raw content safely -->
     <script id="raw-content" type="text/template">{{ note.content }}</script>
     <script>
-        // Render Markdown
-        document.addEventListener('DOMContentLoaded', () => {
+        function doRender() {
             const contentEl = document.getElementById('noteContent');
             const rawContentEl = document.getElementById('raw-content');
-            
-            if (contentEl && rawContentEl) {
+
+            if (contentEl && rawContentEl && window.renderContent) {
                 const rawContent = rawContentEl.textContent;
-                contentEl.innerHTML = ''; 
-                renderContent(contentEl, rawContent);
+                contentEl.innerHTML = '';
+                window.renderContent(contentEl, rawContent);
             }
-        });
+        }
+
+        if (window._markdownRendererReady) {
+            doRender();
+        } else {
+            window.addEventListener('markdown-renderer-ready', doRender);
+        }
     </script>
     {% endif %}
 </body>

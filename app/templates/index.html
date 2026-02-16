@@ -345,5 +345,40 @@
     </div>
 
     <script type="module" src="/static/js/main.js"></script>
+    {% if show_login %}
+    <script>
+        // Auto show login modal when redirected from blog login link
+        // Smart login: Try WebAuthn first if this device has used it before
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(async () => {
+                // 检查是否已登录
+                const userProfile = document.getElementById('userProfile');
+                if (userProfile && userProfile.style.display !== 'none') {
+                    return; // 已登录，不需要显示登录框
+                }
+
+                // 智能登录：如果此设备曾绑定 WebAuthn，优先尝试生物识别
+                if (localStorage.getItem('has_webauthn') === 'true' && window.PublicKeyCredential) {
+                    // 触发侧边栏登录按钮的点击事件，它会自动尝试 WebAuthn
+                    const showLoginBtn = document.getElementById('showLoginBtn');
+                    if (showLoginBtn) {
+                        showLoginBtn.click();
+                        return;
+                    }
+                }
+
+                // 否则直接显示登录模态框
+                const authModal = document.getElementById('authModal');
+                if (authModal) {
+                    authModal.style.display = 'block';
+                    authModal.dataset.mode = 'login';
+                    document.getElementById('authModalTitle').textContent = '登录';
+                    document.getElementById('authSubmitBtn').textContent = '登录';
+                    document.getElementById('authUsername').focus();
+                }
+            }, 300);
+        });
+    </script>
+    {% endif %}
 </body>
 </html>

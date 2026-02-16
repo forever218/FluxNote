@@ -1,0 +1,112 @@
+{% extends "themes/spa/base.html" %}
+
+{% block meta %}
+<meta name="description" content="{{ note.get_excerpt(160) }}">
+<meta property="og:title" content="{{ note.title or '无标题' }}">
+<meta property="og:description" content="{{ note.get_excerpt(160) }}">
+<meta property="og:type" content="article">
+{% endblock %}
+
+{% block title %}{{ note.title or '无标题' }} - {{ site_title }}{% endblock %}
+
+{% block content %}
+<!-- 顶部栏 -->
+<header class="main-header">
+    <div class="header-left">
+        <a href="{{ url_for('blog.index') }}" class="back-link" style="color: var(--primary); text-decoration: none; margin-right: 10px;">
+            <i class="fas fa-arrow-left"></i>
+        </a>
+        <span>文章详情</span>
+    </div>
+</header>
+
+<!-- 文章 -->
+<article class="note-card" style="max-width: 100%;" data-note-id="{{ note.id }}">
+    <div class="post-header">
+        <h1 class="post-title">{{ note.title or '无标题' }}</h1>
+        <div class="post-meta">
+            <span class="note-date" data-timestamp="{{ note.created_at.isoformat() }}">
+                <i class="far fa-calendar"></i> {{ note.created_at.strftime('%Y年%m月%d日') }}
+            </span>
+            <span><i class="far fa-clock"></i> {{ note.reading_time }} 分钟阅读</span>
+            {% if note.updated_at != note.created_at %}
+            <span class="note-date" data-timestamp="{{ note.updated_at.isoformat() }}" data-prefix="更新于 ">
+                <i class="far fa-edit"></i> 更新于 {{ note.updated_at.strftime('%Y年%m月%d日') }}
+            </span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 原始内容 (Hidden) -->
+    <script type="text/markdown" id="raw-content-{{ note.id }}">{{ note.content }}</script>
+
+    <div class="note-content markdown-body" id="note-render-{{ note.id }}">
+        <div class="loading-placeholder">
+            <i class="fas fa-spinner fa-spin"></i> 加载中...
+        </div>
+    </div>
+
+    {% if note.tags_list %}
+    <div class="post-footer">
+        <div class="note-tags">
+            {% for tag in note.tags_list %}
+            <a href="{{ url_for('blog.tag_notes', tag_name=tag.name) }}" class="note-tag">#{{ tag.name }}</a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</article>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+import { renderContent } from '/static/js/markdown-renderer.js';
+
+async function renderPost() {
+    const id = "{{ note.id }}";
+    const rawContainer = document.getElementById(`raw-content-${id}`);
+    const targetContainer = document.getElementById(`note-render-${id}`);
+
+    if (rawContainer && targetContainer) {
+        await renderContent(targetContainer, rawContainer.textContent, {
+            enableViewer: true,
+            enableMermaid: true,
+            enableHighlight: true
+        });
+    }
+
+    formatRelativeTime();
+}
+
+function formatRelativeTime() {
+    const dates = document.querySelectorAll('.note-date[data-timestamp]');
+    const now = new Date();
+
+    dates.forEach(el => {
+        const date = new Date(el.dataset.timestamp);
+        const prefix = el.dataset.prefix || '';
+        const diff = Math.floor((now - date) / 1000);
+
+        let text = '';
+        if (diff < 60) text = '刚刚';
+        else if (diff < 3600) text = `${Math.floor(diff / 60)} 分钟前`;
+        else if (diff < 86400) text = `${Math.floor(diff / 3600)} 小时前`;
+        else if (diff < 604800) text = `${Math.floor(diff / 86400)} 天前`;
+        else text = '';
+
+        if (text) {
+            const iconClass = el.querySelector('i')?.className || 'far fa-clock';
+            el.innerHTML = `<i class="${iconClass}"></i> ${prefix}${text}`;
+            el.title = date.toLocaleString();
+        }
+    });
+}
+
+function initPage() {
+    renderPost();
+}
+
+document.addEventListener('DOMContentLoaded', initPage);
+window.addEventListener('page-ready', initPage);
+</script>
+{% endblock %}

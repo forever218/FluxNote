@@ -1,4 +1,5 @@
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, redirect, url_for
+from flask_login import current_user
 from app.extensions import db
 from app.models import Share, Config
 
@@ -6,8 +7,20 @@ main_bp = Blueprint('main', __name__)
 
 @main_bp.route('/')
 def index():
-    """Home Page"""
-    return render_template('index.html')
+    """Home Page - 登录用户显示SPA管理界面，未登录用户重定向到博客首页"""
+    if current_user.is_authenticated:
+        return render_template('index.html')
+    else:
+        return redirect(url_for('blog.index'))
+
+
+@main_bp.route('/login')
+def login_page():
+    """登录页面 - 显示当前主题首页并触发登录"""
+    if current_user.is_authenticated:
+        return redirect(url_for('main.index'))
+    # 重定向到博客首页，带上 show_login 参数
+    return redirect(url_for('blog.index', show_login=1))
 
 
 @main_bp.route('/s/<share_id>')

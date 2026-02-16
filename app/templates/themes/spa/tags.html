@@ -1,0 +1,89 @@
+{% extends "themes/spa/base.html" %}
+
+{% block title %}标签 - {{ site_title }}{% endblock %}
+
+{% block content %}
+<!-- 顶部栏 -->
+<header class="main-header">
+    <div class="header-left">
+        <button id="mobileMenuBtn" class="mobile-menu-btn" title="菜单"><i class="fas fa-bars"></i></button>
+        <span>标签墙</span>
+    </div>
+    <div class="header-search">
+        <i class="fas fa-search"></i>
+        <input type="text" id="searchInput" placeholder="搜索..." value="{{ search }}">
+    </div>
+</header>
+
+<!-- 标签云 -->
+<div class="notes-stream">
+    {% if tags %}
+        <div class="archive-stats" style="margin-bottom: 20px; color: var(--slate-500); font-size: 14px;">
+            共 {{ tags|length }} 个话题
+        </div>
+
+        <div class="note-card" style="padding: 40px;">
+            <div class="tags-cloud" style="display: flex; flex-wrap: wrap; gap: 12px; justify-content: center;">
+                {% for tag in tags %}
+                <a href="{{ url_for('blog.tag_notes', tag_name=tag.name) }}" class="note-tag" style="
+                    font-size: {{ 13 + (tag.count * 1.5) }}px; 
+                    padding: 8px 16px; 
+                    border-radius: 20px;
+                    border: 1px solid var(--slate-200);
+                    color: var(--slate-600);
+                    background: var(--slate-50);
+                    text-decoration: none;
+                    transition: all 0.2s;
+                ">
+                    #{{ tag.name }} <span style="font-size: 0.8em; opacity: 0.6; margin-left: 4px;">{{ tag.count }}</span>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    {% else %}
+        <div class="note-card empty-card">
+            <div class="empty-state">
+                <i class="fas fa-tags"></i>
+                <p>暂无标签</p>
+                <a href="{{ url_for('blog.index') }}" class="btn-reset">返回首页</a>
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+import spaLoader from '/static/js/spa-loader.js';
+
+function initPage() {
+    // 搜索功能
+    const searchInput = document.getElementById('searchInput');
+    searchInput?.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            const query = e.target.value.trim();
+            spaLoader.navigate('{{ url_for("blog.index") }}' + (query ? '?search=' + encodeURIComponent(query) : ''));
+        }
+    });
+
+    // 标签 Hover 效果
+    document.querySelectorAll('.tags-cloud .note-tag').forEach(tag => {
+        tag.addEventListener('mouseenter', () => {
+            tag.style.borderColor = 'var(--primary)';
+            tag.style.color = 'var(--primary)';
+            tag.style.transform = 'translateY(-2px)';
+            tag.style.boxShadow = '0 4px 10px rgba(0,0,0,0.05)';
+        });
+        tag.addEventListener('mouseleave', () => {
+            tag.style.borderColor = 'var(--slate-200)';
+            tag.style.color = 'var(--slate-600)';
+            tag.style.transform = 'translateY(0)';
+            tag.style.boxShadow = 'none';
+        });
+    });
+}
+
+document.addEventListener('DOMContentLoaded', initPage);
+window.addEventListener('page-ready', initPage);
+</script>
+{% endblock %}

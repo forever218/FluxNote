@@ -1,0 +1,44 @@
+{% extends "themes/next/base.html" %}
+
+{% block title %}归档 | {{ site_title }}{% endblock %}
+
+{% block content %}
+<div class="next-container">
+    <header class="next-page-header">
+        <h1 class="next-page-title">
+            <i class="fas fa-archive"></i> 归档
+        </h1>
+        <p class="next-page-count">{{ total_count }} 篇文章</p>
+    </header>
+
+    <div class="next-archive">
+        {% if archives %}
+            {% for year, months in archives.items() %}
+            <div class="next-archive-year">
+                <h2 class="next-archive-year-title">{{ year }}</h2>
+                {% for month, notes in months.items() %}
+                <div class="next-archive-month">
+                    <h3 class="next-archive-month-title">{{ month }}月</h3>
+                    <ul class="next-archive-posts">
+                        {% for note in notes %}
+                        <li class="next-archive-item">
+                            <time class="next-archive-date">{{ note.created_at.strftime('%m-%d') }}</time>
+                            <a href="{{ url_for('blog.post', note_id=note.id) }}" class="next-archive-link">
+                                {{ note.title or '无标题' }}
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="next-empty">
+                <i class="far fa-folder-open"></i>
+                <p>暂无文章</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

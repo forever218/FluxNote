@@ -4,6 +4,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import json
 import uuid
+import re
+import markdown
 
 # Association Table for Many-to-Many relationship between Note and Tag
 note_tags = db.Table('note_tags',
@@ -92,8 +94,8 @@ class Note(db.Model):
             'title': self.title,
             'links': [ref.target_note.title for ref in self.outgoing_references if ref.target_note],
             'backlinks': [
-                {'id': ref.source_note.id, 'title': ref.source_note.title} 
-                for ref in self.incoming_references 
+                {'id': ref.source_note.id, 'title': ref.source_note.title}
+                for ref in self.incoming_references
                 if ref.source_note and not ref.source_note.is_deleted
             ],
             'tags': [tag.name for tag in self.tags_list],
@@ -104,6 +106,109 @@ class Note(db.Model):
             'is_deleted': self.is_deleted,
             'deleted_at': self.deleted_at.strftime('%Y-%m-%d %H:%M:%S') if self.deleted_at else None
         }
+
+    def get_excerpt(self, max_length=150):
+        """
+        从 Markdown 内容中提取智能摘要
+        - 移除代码块（包括 mermaid、mindmap 等）
+        - 移除 Markdown 语法标记
+        - 将待办事项转换为友好显示
+        - 提取纯文本
+        """
+        if not self.content:
+            return ''
+
+        text = self.content
+
+        # 1. 移除代码块（```...```）
+        text = re.sub(r'```[\s\S]*?```', '', text)
+
+        # 2. 移除行内代码（`code`）
+        text = re.sub(r'`[^`]+`', '', text)
+
+        # 3. 移除图片 ![alt](url)
+        text = re.sub(r'!\[[^\]]*\]\([^)]+\)', '', text)
+
+        # 4. 移除链接 [text](url)，保留文字
+        text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+
+        # 5. 处理待办事项 - [ ] 和 - [x]
+        text = re.sub(r'-\s*\[x\]\s*', '✓ ', text)  # 已完成
+        text = re.sub(r'-\s*\[\s*\]\s*', '○ ', text)  # 未完成
+
+        # 6. 移除标题标记 # ## ### 等
+        text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+
+        # 7. 移除粗体和斜体标记
+        text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)  # 粗体
+        text = re.sub(r'\*([^*]+)\*', r'\1', text)  # 斜体
+        text = re.sub(r'__([^_]+)__', r'\1', text)  # 粗体
+        text = re.sub(r'_([^_]+)_', r'\1', text)  # 斜体
+
+        # 8. 移除删除线
+        text = re.sub(r'~~([^~]+)~~', r'\1', text)
+
+        # 9. 移除引用标记 >
+        text = re.sub(r'^>\s*', '', text, flags=re.MULTILINE)
+
+        # 10. 移除列表标记 - * +
+        text = re.sub(r'^[\-\*\+]\s+', '', text, flags=re.MULTILINE)
+
+        # 11. 移除有序列表标记 1. 2. 等
+        text = re.sub(r'^\d+\.\s+', '', text, flags=re.MULTILINE)
+
+        # 12. 移除 WikiLinks [[...]]
+        text = re.sub(r'\[\[([^\]|]+)(?:\|[^\]]+)?\]\]', r'\1', text)
+
+        # 13. 移除 HTML 标签
+        text = re.sub(r'<[^>]+>', '', text)
+
+        # 14. 移除水平线 --- *** ___
+        text = re.sub(r'^[-*_]{3,}\s*$', '', text, flags=re.MULTILINE)
+
+        # 15. 清理多余空白
+        text = re.sub(r'\n+', ' ', text)  # 换行转空格
+        text = re.sub(r'\s+', ' ', text)  # 多个空格合并
+        text = text.strip()
+
+        # 16. 截断到指定长度
+        if len(text) > max_length:
+            text = text[:max_length].rstrip() + '...'
+
+        return text
+
+    @property
+    def reading_time(self):
+        """估算阅读时间（分钟）"""
+        if not self.content:
+            return 1
+        return max(1, len(self.content) // 400)
+
+    def render_html(self, max_length=None):
+        """
+        渲染Markdown内容为HTML（用于服务端渲染）
+        """
+        if not self.content:
+            return ''
+
+        text = self.content
+
+        # 截断长度
+        if max_length and len(text) > max_length:
+            text = text[:max_length]
+
+        # 移除代码块（在列表页不需要显示完整代码）
+        text = re.sub(r'```[\s\S]*?```', '', text)
+
+        # 移除图片（在列表页可能不需要）
+        # text = re.sub(r'!\[[^\]]*\]\([^)]+\)', '', text)
+
+        try:
+            html = markdown.markdown(text, extensions=['fenced_code', 'tables', 'toc'])
+        except:
+            html = text.replace('\n', '<br>')
+
+        return html
 
 class Config(db.Model):
     key = db.Column(db.String(128), primary_key=True)

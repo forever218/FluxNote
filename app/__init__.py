@@ -9,6 +9,7 @@ from .routes.ai import ai_bp
 from .routes.stats import stats_bp
 from .routes.auth_webauthn import webauthn_bp
 from .routes.share import share_bp
+from .routes.blog import blog_bp
 import os
 from sqlalchemy import text, inspect
 
@@ -50,6 +51,7 @@ def create_app():
     app.register_blueprint(stats_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(share_bp, url_prefix='/api')  # 分享功能
+    app.register_blueprint(blog_bp)  # 博客功能
 
     # Register Upload Route (Global)
     # Since we removed it from notes_bp to avoid /api/uploads prefix issue if not desired,

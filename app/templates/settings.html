@@ -25,10 +25,27 @@
                 <label>SEO 描述</label>
                 <input type="text" id="siteDesc" placeholder="简单记录生活">
             </div>
+            <div class="form-row">
+                <label>博客页脚 <span style="color:#999; font-weight:normal;">(支持HTML，可用于备案号等)</span></label>
+                <textarea id="blogFooter" placeholder='由 <a href="/">轻笔记</a> 提供支持' rows="2" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; font-family:inherit;"></textarea>
+            </div>
             <div class="form-row" style="margin-top: 20px;">
                 <button class="btn btn-primary" onclick="saveBasicSettings()">
                     <i class="fas fa-save"></i> 保存基本设置
                 </button>
+            </div>
+        </div>
+
+        <!-- 博客主题 -->
+        <div class="settings-section">
+            <div class="section-title"><i class="fas fa-palette"></i> 博客主题</div>
+            <div class="form-row">
+                <p class="help-text" style="margin-bottom: 20px;">
+                    选择访客看到的博客外观风格。
+                </p>
+                <div id="themesList" class="themes-list">
+                    <!-- 主题列表将通过 JS 加载 -->
+                </div>
             </div>
         </div>
 
@@ -208,6 +225,7 @@
             loadSettings();
             loadProviders();
             loadCustomPrompts();
+            loadThemes();
         });
 
         // ... existing loadSettings ...
@@ -453,8 +471,9 @@
 
                 if (data.site_title) document.getElementById('siteTitle').value = data.site_title;
                 if (data.site_desc) document.getElementById('siteDesc').value = data.site_desc;
+                if (data.blog_footer) document.getElementById('blogFooter').value = data.blog_footer;
                 if (data.polish_styles) document.getElementById('polishStyles').value = data.polish_styles;
-                
+
                 // History settings
                 const keepHistory = data.keep_history !== 'false'; // Default to true
                 document.getElementById('keepHistoryToggle').checked = keepHistory;
@@ -517,6 +536,7 @@
         async function saveBasicSettings() {
             const siteTitle = document.getElementById('siteTitle').value;
             const siteDesc = document.getElementById('siteDesc').value;
+            const blogFooter = document.getElementById('blogFooter').value;
 
             try {
                 const response = await fetch('/api/settings', {
@@ -524,7 +544,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         site_title: siteTitle,
-                        site_desc: siteDesc
+                        site_desc: siteDesc,
+                        blog_footer: blogFooter
                     })
                 });
 
@@ -577,6 +598,58 @@
             toast.textContent = message;
             toast.className = 'toast show';
             setTimeout(() => { toast.className = 'toast'; }, 3000);
+        }
+
+        // === Theme Management ===
+        async function loadThemes() {
+            try {
+                const response = await fetch('/api/themes');
+                const data = await response.json();
+                renderThemes(data.themes, data.current);
+            } catch (error) {
+                console.error('Failed to load themes');
+            }
+        }
+
+        function renderThemes(themes, currentTheme) {
+            const list = document.getElementById('themesList');
+            list.innerHTML = '';
+
+            Object.entries(themes).forEach(([key, theme]) => {
+                const isActive = key === currentTheme;
+                const item = document.createElement('div');
+                item.className = `theme-item ${isActive ? 'active' : ''}`;
+                item.innerHTML = `
+                    <div class="theme-preview" style="background: linear-gradient(135deg, ${key === 'next' ? '#0e83cd' : '#10b981'} 0%, ${key === 'next' ? '#f5f7f9' : '#fff'} 100%);">
+                        <span class="theme-preview-label">${theme.name}</span>
+                    </div>
+                    <div class="theme-info">
+                        <div class="theme-name">${theme.name} ${isActive ? '<span class="badge">使用中</span>' : ''}</div>
+                        <div class="theme-desc">${theme.description}</div>
+                        <div class="theme-author">作者: ${theme.author}</div>
+                    </div>
+                    ${!isActive ? `<button class="btn btn-sm btn-primary" onclick="activateTheme('${key}')">启用</button>` : ''}
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        async function activateTheme(themeName) {
+            try {
+                const response = await fetch('/api/themes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ theme: themeName })
+                });
+                if (response.ok) {
+                    showToast('主题已切换');
+                    loadThemes();
+                } else {
+                    showToast('切换失败');
+                }
+            } catch (error) {
+                showToast('切换失败');
+            }
         }
     </script>
 </body>
