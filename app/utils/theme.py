@@ -73,17 +73,121 @@ def get_theme_info(theme_name):
     themes = get_all_themes()
     return themes.get(theme_name, {})
 
+def get_theme_settings(theme_name):
+    """
+    获取指定主题的配置定义��并规范化为前端期望的结构。
+
+    前端期望结构：
+    - group: 分组标识
+    - label: 分组显示名称
+    - fields: 配置字段列表，每个字段包含 name, label, type 等
+
+    支持的 theme.json 写法：
+    1. 使用 fields 和 name（推荐，与前端一致）
+    2. 使用 items 和 key（兼容旧写法）
+    """
+    info = get_theme_info(theme_name)
+    settings = info.get('settings', [])
+
+    normalized_settings = []
+    for group in settings:
+        # 兼容 items 和 fields 两种命名
+        raw_fields = group.get('fields', group.get('items', []))
+
+        new_fields = []
+        for field in raw_fields:
+            new_field = field.copy()
+            # 确保字段有 name 属性（前端使用 name 作为字段标识）
+            if 'name' not in new_field and 'key' in new_field:
+                new_field['name'] = new_field['key']
+            new_fields.append(new_field)
+
+        normalized_settings.append({
+            'group': group.get('group', ''),
+            'label': group.get('label', ''),
+            'fields': new_fields
+        })
+
+    return normalized_settings
+
+def get_user_theme_config(theme_name, filter_sensitive=False):
+    """
+    获取用户配置（合并默认值）
+
+    :param theme_name: 主题名称
+    :param filter_sensitive: 是否过滤敏感配置（用于公开接口）
+    :return: 合并后的配置字典
+    """
+    # 1. 获取默认配置
+    settings_def = get_theme_settings(theme_name)
+    default_config = {}
+
+    # 遍历配置组和配置字段提取默认值
+    for group in settings_def:
+        fields = group.get('fields', [])
+        for field in fields:
+            name = field.get('name')
+            if name:
+                # 优先使用 default，如果没有则为 None
+                default_config[name] = field.get('default')
+
+    # 2. 获取用户保存的配置
+    config_key = f'theme_config_{theme_name}'
+    user_config_json = Config.get(config_key)
+
+    user_config = {}
+    if user_config_json:
+        try:
+            user_config = json.loads(user_config_json)
+        except json.JSONDecodeError:
+            print(f"Error decoding theme config for {theme_name}")
+            user_config = {}
+
+    # 3. 合并配置（用户配置覆盖默认配置）
+    final_config = default_config.copy()
+    if user_config:
+        final_config.update(user_config)
+
+    # 4. 过滤敏感配置
+    if filter_sensitive:
+        sensitive_prefixes = ('secret_', 'private_', '_')
+        final_config = {
+            k: v for k, v in final_config.items()
+            if not k.startswith(sensitive_prefixes)
+        }
+
+    return final_config
+
+def save_user_theme_config(theme_name, config_data):
+    """保存用户配置"""
+    if not theme_name:
+        raise ValueError("Theme name is required")
+        
+    config_key = f'theme_config_{theme_name}'
+    # 确保保存的是 JSON 字符串
+    config_value = json.dumps(config_data, ensure_ascii=False)
+    Config.set(config_key, config_value, f'Theme config for {theme_name}')
+
 def render_theme_template(template_name, **context):
     """渲染主题模板，支持自动降级到创作主题"""
     # 优先从 context 中获取 theme_override (由路由逻辑传递)
     theme = context.get('theme_override') or get_current_theme()
+    
+    # 注入主题配置到上下文
+    if 'theme_config' not in context:
+        context['theme_config'] = get_user_theme_config(theme)
     
     theme_template = f"themes/{theme}/{template_name}"
 
     # 检查主题模板是否存在，不存在则回退到创作主题
     template_dir = os.path.join(current_app.root_path, 'templates', 'themes', theme)
     if not os.path.exists(os.path.join(template_dir, template_name)):
-        theme_template = f"themes/{get_writer_theme()}/{template_name}"
+        writer_theme = get_writer_theme()
+        theme_template = f"themes/{writer_theme}/{template_name}"
+        # 如果回退了主题，配置也应该回退吗？
+        # 通常不，因为我们是在当前主题的上下文中渲染（只是借用了模板），
+        # 但如果模板依赖特定主题的配置，可能会报错。
+        # 暂时保持使用当前主题的配置，因为这是用户的意图。
 
     return render_template(theme_template, **context)
 

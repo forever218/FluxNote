@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block body_class %}theme-spa{% endblock %}
+{% block body_class %}theme-spa{% if theme_config.sidebar_collapsed %} sidebar-collapsed{% endif %}{% endblock %}
 {% block content_selector %}.main-stream{% endblock %}
 {% block nav_selector %}.sidebar-nav .nav-item{% endblock %}
 {% block auto_reset_selectors %}['#sidebar']{% endblock %}
@@ -9,7 +9,7 @@
     <div class="app-layout" id="appLayout">
         <div class="app-container">
             <!-- 侧边栏 -->
-            <aside class="sidebar" id="sidebar">
+            <aside class="sidebar{% if theme_config.sidebar_collapsed %} collapsed{% endif %}" id="sidebar">
                 <!-- Toggle Button (声明式切换) -->
                 <button class="sidebar-toggle-btn" data-toggle-menu data-target="#sidebar" data-class="collapsed" title="收起侧边栏">
                     <i class="fas fa-chevron-left"></i>
@@ -24,6 +24,7 @@
                 </div>
 
                 <!-- 统计 & 热力图 -->
+                {% if theme_config.show_stats is not sameas false %}
                 <div class="stats-panel" id="statsSection">
                     <div class="stats-row">
                         <div class="stat-item">
@@ -40,8 +41,11 @@
                         </div>
                     </div>
                     <!-- 热力图容器 -->
+                    {% if theme_config.show_heatmap is not sameas false %}
                     <div id="heatmapGrid" class="heatmap-grid-compact"></div>
+                    {% endif %}
                 </div>
+                {% endif %}
 
                 <!-- 导航菜单 -->
                 <nav class="sidebar-nav">
@@ -57,16 +61,19 @@
                 </nav>
 
                 <!-- 标签列表 -->
+                {% if theme_config.show_tags_section is not sameas false %}
                 <div class="sidebar-section tags-section">
                     <h3 class="section-title">话题 / 标签</h3>
                     <div class="filter-tags-list">
                         {% if popular_tags %}
-                        {% for tag in popular_tags[:15] %}
+                        {% set tags_limit = theme_config.tags_limit or 15 %}
+                        {% for tag in popular_tags[:tags_limit] %}
                         <a href="{{ url_for('blog.tag_notes', tag_name=tag.name) }}" class="sidebar-tag">#{{ tag.name }}</a>
                         {% endfor %}
                         {% endif %}
                     </div>
                 </div>
+                {% endif %}
 
                 <!-- 底部登录入口 (声明式认证) -->
                 <div class="sidebar-footer" style="margin-top: auto; padding: 20px 0 0 0;">
@@ -86,6 +93,19 @@
     <!-- Toast 容器 (SDK 会自动查找，但主题可以自定义样式) -->
     <div id="toast" class="toast"></div>
     <div id="customTooltip" class="custom-tooltip"></div>
+
+    <!-- 自定义CSS -->
+    {% if theme_config.custom_css or theme_config.primary_color %}
+    <style>
+        {% if theme_config.primary_color %}
+        :root {
+            --theme-primary: {{ theme_config.primary_color }};
+            --anzhiyu-main: {{ theme_config.primary_color }};
+        }
+        {% endif %}
+        {{ theme_config.custom_css if theme_config.custom_css else '' }}
+    </style>
+    {% endif %}
 {% endblock %}
 
 {% block scripts %}
