@@ -118,7 +118,17 @@ export const ui = {
         let rawContent = note.content || '';
         // Normalize task list syntax: convert - [] or -[ ] to - [ ] (supports indented lists)
         rawContent = rawContent.replace(/^(\s*[-*])\s*\[([ xX]?)\]/gm, '$1 [$2]');
-        
+
+        // Pre-process: Fix bold syntax with quotes (marked.js doesn't handle **"quote"** well)
+        // Handle English quotes: **"content"**
+        rawContent = rawContent.replace(/\*\*"([^"]+)"([^\*]*?)\*\*/g, '<strong>"$1"$2</strong>');
+        // Handle Chinese quotes: **"content"** (U+201C left, U+201D right)
+        rawContent = rawContent.replace(/\*\*\u201C([^\u201D]+)\u201D([^\*]*?)\*\*/g, '<strong>\u201C$1\u201D$2</strong>');
+        // Handle 「」
+        rawContent = rawContent.replace(/\*\*「([^」]+)」([^\*]*?)\*\*/g, '<strong>「$1」$2</strong>');
+        // Handle 『』
+        rawContent = rawContent.replace(/\*\*『([^』]+)』([^\*]*?)\*\*/g, '<strong>『$1』$2</strong>');
+
         let content = rawContent;
         const searchVal = document.getElementById('searchInput')?.value.trim() || '';
 

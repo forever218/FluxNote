@@ -5,6 +5,28 @@ import { auth, initAuthEvents } from './modules/auth.js';
 import { editor } from './modules/editor.js';
 import { showToast, debounce, parseWikiLinks, escapeHtml } from './modules/utils.js';
 
+// === Scroll Loading Indicator ===
+function showScrollLoading() {
+    const list = document.getElementById('notesList');
+    if (!list) return;
+
+    let loader = list.querySelector('.scroll-loading');
+    if (!loader) {
+        loader = document.createElement('div');
+        loader.className = 'scroll-loading';
+        loader.innerHTML = '<i class="fas fa-spinner fa-spin"></i>加载更多...';
+        list.appendChild(loader);
+    }
+}
+
+function hideScrollLoading() {
+    const list = document.getElementById('notesList');
+    if (!list) return;
+
+    const loader = list.querySelector('.scroll-loading');
+    if (loader) loader.remove();
+}
+
 // === Main Logic ===
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -55,6 +77,12 @@ async function loadNotes(reset = false) {
     }
 
     setState('isLoading', true);
+
+    // Show loading indicator for infinite scroll (not reset)
+    if (!reset) {
+        showScrollLoading();
+    }
+
     const list = document.getElementById('notesList');
     if (reset && list) {
         // Show skeleton loader
@@ -95,6 +123,7 @@ async function loadNotes(reset = false) {
         console.error("Load notes failed", e);
     } finally {
         setState('isLoading', false);
+        hideScrollLoading();
     }
 }
 
@@ -292,7 +321,64 @@ function initGlobalEvents() {
 
         // Store close function for external use
         window.closeMobileSidebar = closeMobileSidebar;
+
+        // Mobile sidebar close button
+        const mobileCloseBtn = document.getElementById('sidebarMobileClose');
+        if (mobileCloseBtn) {
+            mobileCloseBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                closeMobileSidebar();
+            });
+        }
     }
+
+    // Search Clear Button
+    const searchInput = document.getElementById('searchInput');
+    const searchClearBtn = document.getElementById('searchClearBtn');
+    const headerSearch = document.querySelector('.header-search');
+
+    if (searchInput && searchClearBtn && headerSearch) {
+        // Show/hide clear button based on input value
+        const updateClearButton = () => {
+            if (searchInput.value.trim()) {
+                headerSearch.classList.add('has-value');
+            } else {
+                headerSearch.classList.remove('has-value');
+            }
+        };
+
+        searchInput.addEventListener('input', updateClearButton);
+        updateClearButton(); // Initial check
+
+        // Clear input on button click
+        searchClearBtn.addEventListener('click', () => {
+            searchInput.value = '';
+            searchInput.focus();
+            headerSearch.classList.remove('has-value');
+            loadNotes(true);
+        });
+    }
+
+    // Compact Editor on Scroll (Mobile)
+    const memoEditor = document.querySelector('.memo-editor');
+    let lastScrollY = 0;
+    let scrollTimeout = null;
+
+    window.addEventListener('scroll', () => {
+        if (window.innerWidth <= 900 && memoEditor && memoEditor.style.display !== 'none') {
+            const currentScrollY = window.scrollY;
+
+            if (currentScrollY > 100 && currentScrollY > lastScrollY) {
+                // Scrolling down - make compact
+                memoEditor.classList.add('compact');
+            } else if (currentScrollY < lastScrollY - 20) {
+                // Scrolling up - expand
+                memoEditor.classList.remove('compact');
+            }
+
+            lastScrollY = currentScrollY;
+        }
+    });
 
     // Search
     document.getElementById('searchInput')?.addEventListener('input', debounce(() => {

@@ -263,6 +263,16 @@ class Note(db.Model):
             text = text[:max_length]
 
         try:
+            # 预处理：修复 **引号内容** 格式的粗体解析问题
+            # 处理英文引号 **"content"**
+            text = re.sub(r'\*\*"([^"]+)"([^\*]*?)\*\*', r'<strong>"\1"\2</strong>', text)
+            # 处理中文引号 **"content"** (U+201C, U+201D)
+            text = re.sub(r'\*\*\u201C([^\u201D]+)\u201D([^\*]*?)\*\*', r'<strong>\u201C\1\u201D\2</strong>', text)
+            # 处理 **「content」**
+            text = re.sub(r'\*\*「([^」]+)」([^\*]*?)\*\*', r'<strong>「\1」\2</strong>', text)
+            # 处理 **『content』**
+            text = re.sub(r'\*\*『([^』]+)』([^\*]*?)\*\*', r'<strong>『\1』\2</strong>', text)
+
             # 渲染Markdown
             html = markdown.markdown(text, extensions=['fenced_code', 'tables', 'toc'])
             # XSS清洗

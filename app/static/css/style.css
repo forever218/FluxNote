@@ -115,6 +115,34 @@ button { font-family: inherit; }
 }
 .sidebar-toggle-btn:hover { opacity: 1; background: var(--slate-200); color: var(--slate-700); }
 
+/* Mobile Sidebar Close Button - hidden on desktop */
+.sidebar-mobile-close {
+    display: none;
+}
+
+/* Search Clear Button - hidden on desktop, shown when input has value */
+.search-clear-btn {
+    display: none;
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: var(--slate-400);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 4px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.search-clear-btn:hover {
+    color: var(--slate-600);
+}
+.header-search.has-value .search-clear-btn {
+    opacity: 1;
+}
+
 /* Floating Expand Button (Outside Sidebar) */
 .floating-menu-btn {
     position: fixed;
@@ -1800,16 +1828,9 @@ input:checked + .slider:before {
         margin-bottom: 12px;
     }
 
-    /* Tags */
+    /* Tags - inherit desktop style */
     .note-tags {
         margin-bottom: 12px;
-    }
-    .note-tag {
-        font-size: 12px;
-        padding: 2px 8px;
-        background: #F6F7F9;
-        border: none;
-        color: #666;
     }
 
     /* Action Bar (Bottom of Card) */
@@ -1912,6 +1933,63 @@ input:checked + .slider:before {
     .sidebar-toggle-btn,
     .floating-menu-btn {
         display: none !important;
+    }
+
+    /* Mobile Sidebar Close Button */
+    .sidebar-mobile-close {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        width: 32px;
+        height: 32px;
+        background: var(--slate-100);
+        border: none;
+        border-radius: 50%;
+        color: var(--slate-500);
+        font-size: 14px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+        z-index: 10;
+    }
+    .sidebar-mobile-close:hover {
+        background: var(--slate-200);
+        color: var(--slate-700);
+    }
+
+    /* Compact Editor on Scroll (Mobile) */
+    .memo-editor.compact {
+        padding: 12px 16px;
+    }
+    .memo-editor.compact #noteContent {
+        min-height: 40px;
+        font-size: 14px;
+    }
+    .memo-editor.compact .editor-footer {
+        margin-top: 8px;
+        padding-top: 8px;
+    }
+    .memo-editor.compact .tags-bar {
+        display: none;
+    }
+
+    /* Search with Cancel Button (Mobile) */
+    /* Search Clear Button on Mobile */
+    .search-clear-btn {
+        display: block;
+    }
+
+    /* Loading Indicator for Infinite Scroll */
+    .scroll-loading {
+        text-align: center;
+        padding: 20px;
+        color: var(--slate-400);
+        font-size: 13px;
+    }
+    .scroll-loading i {
+        margin-right: 6px;
     }
 }
 

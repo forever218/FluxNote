@@ -49,6 +49,11 @@
                     <i class="fas fa-chevron-left"></i>
                 </button>
 
+                <!-- Mobile Close Button -->
+                <button class="sidebar-mobile-close" id="sidebarMobileClose" title="关闭">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+
                 <!-- 1. 顶部：博客标题/用户信息 (访客看博客名，博主看自己信息) -->
                 <div class="sidebar-header">
                    <div class="blog-brand" id="blogBrand">
@@ -140,8 +145,9 @@
                     <span id="currentDateDisplay">...</span>
                 </div>
                 <div class="header-search">
-                    <i class="fas fa-search"></i>
+                    <i class="fas fa-search header-search-icon"></i>
                     <input type="text" id="searchInput" placeholder="搜索...">
+                    <button class="search-clear-btn" id="searchClearBtn" type="button"><i class="fas fa-times"></i></button>
                 </div>
             </header>
 
