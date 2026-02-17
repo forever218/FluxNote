@@ -163,19 +163,23 @@ def archive():
 
     # 按年月分组
     archives = OrderedDict()
+    year_notes = {}  # 每年的文章数
     for note in notes:
         year = note.created_at.year
         month = note.created_at.month
 
         if year not in archives:
             archives[year] = OrderedDict()
+            year_notes[year] = 0
         if month not in archives[year]:
             archives[year][month] = []
         archives[year][month].append(note)
+        year_notes[year] += 1
 
     return render_theme_template('archive.html',
         archives=archives,
-        total_count=len(notes),
+        year_notes=year_notes,
+        total_notes=len(notes),
         theme_override=theme_override,
         **config
     )

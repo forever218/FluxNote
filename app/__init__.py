@@ -1,6 +1,6 @@
-from flask import Flask, send_from_directory
+from flask import Flask, send_from_directory, jsonify, render_template
 from .extensions import db, login_manager, cors, migrate
-from .models import User
+from .models import User, Config
 from .routes.auth import auth_bp
 from .routes.notes import notes_bp
 from .routes.main import main_bp
@@ -13,6 +13,16 @@ from .routes.blog import blog_bp
 from .routes.comment import comment_bp
 import os
 from sqlalchemy import text, inspect
+import traceback
+
+
+def is_debug_mode():
+    """检查是否开启调试模式"""
+    try:
+        return Config.get('debug_mode', 'false').lower() == 'true'
+    except:
+        return False
+
 
 def create_app():
     app = Flask(__name__)
@@ -31,6 +41,13 @@ def create_app():
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+
+    # 默认关闭调试模式，稍后根据数据库配置更新
+    app.config['DEBUG'] = False
+    # 禁止异常传播，防止显示详细错误
+    app.config['PROPAGATE_EXCEPTIONS'] = False
+    # 隐藏服务器信息
+    app.config['SERVER_NAME'] = None
 
     # Initialize Extensions
     db.init_app(app)
@@ -56,17 +73,66 @@ def create_app():
     app.register_blueprint(comment_bp, url_prefix='/api') # 评论功能
 
     # Register Upload Route (Global)
-    # Since we removed it from notes_bp to avoid /api/uploads prefix issue if not desired,
-    # or if we kept it in notes_bp but mapped to /api, it would be /api/uploads/filename.
-    # The frontend expects /uploads/filename.
-    # Let's add the route manually here or in main_bp.
-    # Adding here for clarity of static serving.
     @app.route('/uploads/<filename>')
     def uploaded_file(filename):
         return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
+    # ===== Global Error Handlers =====
+    # 防止在生产环境中泄露敏感错误信息
+
+    @app.errorhandler(404)
+    def not_found_error(error):
+        # 判断是否是 API 请求
+        if hasattr(error, 'description') and '/api/' in getattr(error, 'description', ''):
+            return jsonify({'code': 404, 'message': '资源不存在'}), 404
+        try:
+            return render_template('error.html', error_code=404, error_message='页面不存在'), 404
+        except:
+            return '<h1>404 - 页面不存在</h1>', 404
+
+    @app.errorhandler(500)
+    def internal_error(error):
+        db.session.rollback()
+        debug = is_debug_mode()
+        if debug:
+            # 调试模式：显示详细错误
+            print(f"[Error 500] {type(error).__name__}: {str(error)}")
+            traceback.print_exc()
+            return jsonify({
+                'code': 500,
+                'message': str(error),
+                'error_type': type(error).__name__
+            }), 500
+        return jsonify({'code': 500, 'message': '服务器内部错误'}), 500
+
+    @app.errorhandler(Exception)
+    def handle_exception(error):
+        """捕获所有未处理的异常"""
+        debug = is_debug_mode()
+
+        # 记录错误日志
+        print(f"[Unhandled Exception] {type(error).__name__}: {str(error)}")
+        if debug:
+            traceback.print_exc()
+
+        db.session.rollback()
+
+        if debug:
+            # 调试模式：返回详细错误
+            return jsonify({
+                'code': 500,
+                'message': str(error),
+                'error_type': type(error).__name__,
+                'traceback': traceback.format_exc()
+            }), 500
+
+        # 生产模式：返回通用错误
+        return jsonify({'code': 500, 'message': '服务器内部错误'}), 500
+
     # Initialize DB logic
     with app.app_context():
         db.create_all()
+        # 根据数据库配置更新调试模式
+        app.config['DEBUG'] = is_debug_mode()
 
     return app
