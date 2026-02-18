@@ -294,12 +294,15 @@ class Config(db.Model):
 
     @staticmethod
     def set(key, value, description=None):
+        # 统一处理布尔值，转换为小写字符串
+        if isinstance(value, bool):
+            value = 'true' if value else 'false'
         conf = db.session.get(Config, key)
         if not conf:
-            conf = Config(key=key, value=value, description=description)
+            conf = Config(key=key, value=str(value), description=description)
             db.session.add(conf)
         else:
-            conf.value = value
+            conf.value = str(value)
             if description:
                 conf.description = description
         db.session.commit()

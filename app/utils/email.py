@@ -192,9 +192,14 @@ def send_async_email(app, msg):
         try:
             # 获取配置
             smtp_server = Config.get('smtp_server')
-            smtp_port = int(Config.get('smtp_port', 465))
             smtp_user = Config.get('smtp_user')
             smtp_password = Config.get('smtp_password')
+
+            # 安全获取端口
+            try:
+                smtp_port = int(Config.get('smtp_port', '465'))
+            except (ValueError, TypeError):
+                smtp_port = 465
 
             if not all([smtp_server, smtp_user, smtp_password]):
                 print("SMTP settings incomplete")

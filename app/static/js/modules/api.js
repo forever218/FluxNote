@@ -8,6 +8,10 @@ export async function fetchJson(url, options = {}) {
             window.dispatchEvent(new CustomEvent('auth:unauthorized'));
             return null;
         }
+        if (!response.ok) {
+            console.error(`HTTP error: ${response.status} ${response.statusText}`);
+            return null;
+        }
         return response;
     } catch (e) {
         console.error("Fetch error:", e);

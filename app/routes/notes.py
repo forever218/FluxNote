@@ -249,7 +249,7 @@ def update_note(note_id):
 
         # === Create Version History ===
         from app.models import Config
-        keep_history = Config.get('keep_history', 'true') == 'true'
+        keep_history = Config.get('keep_history', 'true').lower() == 'true'
 
         if keep_history and note.content != content:
             version = NoteVersion(
