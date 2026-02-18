@@ -3,7 +3,7 @@ import { state, setState } from './modules/state.js';
 import { ui } from './modules/ui.js';
 import { auth, initAuthEvents } from './modules/auth.js';
 import { editor } from './modules/editor.js';
-import { showToast, debounce, parseWikiLinks, escapeHtml } from './modules/utils.js';
+import { showToast, debounce, parseWikiLinks, escapeHtml, showConfirm } from './modules/utils.js';
 
 // === Scroll Loading Indicator ===
 function showScrollLoading() {
@@ -241,7 +241,8 @@ function initGlobalEvents() {
 
                     list.querySelectorAll('.delete-share-btn').forEach(btn => {
                         btn.onclick = async () => {
-                            if (!confirm('确定要取消此分享吗？链接将失效。')) return;
+                            const confirmed = await showConfirm('链接将失效，确定要取消此分享吗？', { title: '取消分享', type: 'danger' });
+                            if (!confirmed) return;
                             const shareId = btn.dataset.id.trim();
                             const res = await api.share.delete(shareId);
                             if (res && res.ok) {
@@ -359,26 +360,28 @@ function initGlobalEvents() {
         });
     }
 
-    // Compact Editor on Scroll (Mobile)
+    // Compact Editor on Scroll (Mobile) - 监听笔记列表区域滚动
     const memoEditor = document.querySelector('.memo-editor');
-    let lastScrollY = 0;
-    let scrollTimeout = null;
+    const notesStream = document.querySelector('.notes-stream');
+    let lastScrollTop = 0;
 
-    window.addEventListener('scroll', () => {
-        if (window.innerWidth <= 900 && memoEditor && memoEditor.style.display !== 'none') {
-            const currentScrollY = window.scrollY;
+    if (notesStream && memoEditor) {
+        notesStream.addEventListener('scroll', () => {
+            if (window.innerWidth <= 900 && memoEditor.style.display !== 'none') {
+                const currentScrollTop = notesStream.scrollTop;
 
-            if (currentScrollY > 100 && currentScrollY > lastScrollY) {
-                // Scrolling down - make compact
-                memoEditor.classList.add('compact');
-            } else if (currentScrollY < lastScrollY - 20) {
-                // Scrolling up - expand
-                memoEditor.classList.remove('compact');
+                if (currentScrollTop > 50 && currentScrollTop > lastScrollTop) {
+                    // 向下滚动 - 收缩编辑器
+                    memoEditor.classList.add('compact');
+                } else if (currentScrollTop < lastScrollTop - 10) {
+                    // 向上滚动 - 展开编辑器
+                    memoEditor.classList.remove('compact');
+                }
+
+                lastScrollTop = currentScrollTop;
             }
-
-            lastScrollY = currentScrollY;
-        }
-    });
+        });
+    }
 
     // Search
     document.getElementById('searchInput')?.addEventListener('input', debounce(() => {
@@ -396,16 +399,18 @@ function initGlobalEvents() {
         loadTags();
     });
 
-    // Infinite Scroll
-    window.addEventListener('scroll', () => {
-        const searchInput = document.getElementById('searchInput');
-        if (searchInput && searchInput.value.trim() !== '') return;
-        if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
-            if (!state.isLoading && state.hasNextPage) {
-                loadNotes(false);
+    // Infinite Scroll - 监听笔记列表区域
+    if (notesStream) {
+        notesStream.addEventListener('scroll', () => {
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput && searchInput.value.trim() !== '') return;
+            if (notesStream.scrollTop + notesStream.clientHeight >= notesStream.scrollHeight - 300) {
+                if (!state.isLoading && state.hasNextPage) {
+                    loadNotes(false);
+                }
             }
-        }
-    });
+        });
+    }
 
     // Save Note
     document.getElementById('saveNote')?.addEventListener('click', async () => {
@@ -439,10 +444,28 @@ function initGlobalEvents() {
     const tagInput = document.getElementById('tagInput');
     const toggleTagBtn = document.getElementById('toggleTagInputBtn');
     if (toggleTagBtn && tagInput) {
+        // 手机端：#按钮变成添加标签功能
         toggleTagBtn.addEventListener('click', () => {
-            tagInput.style.display = tagInput.style.display === 'none' ? 'inline-block' : 'none';
-            if (tagInput.style.display !== 'none') tagInput.focus();
+            if (window.innerWidth <= 900) {
+                // 手机端
+                const val = tagInput.value.trim();
+                if (val) {
+                    // 有内容，添加标签
+                    if (!state.currentTags.includes(val)) {
+                        state.currentTags.push(val);
+                        ui.renderTags('input');
+                    }
+                    tagInput.value = '';
+                }
+                // 无论有没有内容，都聚焦输入框
+                tagInput.focus();
+            } else {
+                // 桌面端：切换输入框显示
+                tagInput.style.display = tagInput.style.display === 'none' ? 'inline-block' : 'none';
+                if (tagInput.style.display !== 'none') tagInput.focus();
+            }
         });
+
         tagInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
@@ -453,6 +476,39 @@ function initGlobalEvents() {
                     tagInput.value = '';
                 }
             }
+        });
+    }
+
+    // Image Upload Button
+    const imageUploadBtn = document.querySelector('.memo-editor .tool-btn[title="上传图片"]');
+    if (imageUploadBtn) {
+        imageUploadBtn.addEventListener('click', () => {
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = 'image/*';
+            fileInput.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const formData = new FormData();
+                formData.append('file', file);
+                showToast('正在上传图片...');
+
+                const res = await api.upload(formData);
+                if (res && res.ok) {
+                    const data = await res.json();
+                    const noteContent = document.getElementById('noteContent');
+                    const md = `\n![image](${data.url})\n`;
+                    if (noteContent.setRangeText) {
+                        noteContent.setRangeText(md);
+                    } else {
+                        noteContent.value += md;
+                    }
+                    showToast('图片上传成功');
+                } else {
+                    showToast('上传失败');
+                }
+            };
+            fileInput.click();
         });
     }
 
@@ -501,7 +557,8 @@ function initGlobalEvents() {
     window.addEventListener('note:refresh-list', () => loadNotes(true));
 
     window.addEventListener('note:delete', async (e) => {
-        if (!confirm('确定要删除这条笔记吗？')) return;
+        const confirmed = await showConfirm('确定要删除这条笔记吗？', { title: '删除笔记', type: 'danger' });
+        if (!confirmed) return;
         const res = await api.notes.delete(e.detail);
         if (res && res.ok) {
             showToast('已删除');
@@ -517,7 +574,8 @@ function initGlobalEvents() {
     });
 
     window.addEventListener('note:permanent-delete', async (e) => {
-        if (!confirm('彻底删除后无法恢复，确定吗？')) return;
+        const confirmed = await showConfirm('彻底删除后无法恢复，确定吗？', { title: '彻底删除', type: 'danger' });
+        if (!confirmed) return;
         const res = await api.notes.permanentDelete(e.detail);
         if (res && res.ok) {
             showToast('已彻底删除');
@@ -618,7 +676,8 @@ function initGlobalEvents() {
 
                 list.querySelectorAll('.restore-v-btn').forEach(btn => {
                     btn.onclick = async () => {
-                        if (!confirm('确定要恢复到此版本吗？')) return;
+                        const confirmed = await showConfirm('确定要恢复到此版本吗？', { title: '恢复版本' });
+                        if (!confirmed) return;
                         const r = await api.notes.restoreVersion(noteId, btn.dataset.vid);
                         if (r && r.ok) {
                             showToast('已恢复版本');

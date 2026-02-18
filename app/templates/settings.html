@@ -384,6 +384,9 @@
         </div>
     </div>
 
+    <script type="module">
+        import '/static/js/modules/utils.js';
+    </script>
     <script>
         // Load settings on init
         document.addEventListener('DOMContentLoaded', () => {
@@ -857,50 +860,6 @@
             toast.textContent = message;
             toast.className = `toast show toast-${type}`;
             setTimeout(() => { toast.className = 'toast'; }, 3000);
-        }
-
-        // 统一确认对话框
-        function showConfirm(title, message) {
-            return new Promise((resolve) => {
-                const existing = document.getElementById('confirm-modal');
-                if (existing) existing.remove();
-
-                const modal = document.createElement('div');
-                modal.id = 'confirm-modal';
-                modal.className = 'confirm-modal';
-                modal.innerHTML = `
-                    <div class="confirm-modal-backdrop"></div>
-                    <div class="confirm-modal-content">
-                        <div class="confirm-modal-header">
-                            <i class="fas fa-exclamation-triangle confirm-modal-icon"></i>
-                            <h3>${title}</h3>
-                        </div>
-                        <div class="confirm-modal-body">${message}</div>
-                        <div class="confirm-modal-footer">
-                            <button class="btn btn-secondary" data-action="cancel">取消</button>
-                            <button class="btn btn-danger" data-action="confirm">确定</button>
-                        </div>
-                    </div>
-                `;
-
-                document.body.appendChild(modal);
-
-                // 动画显示
-                requestAnimationFrame(() => modal.classList.add('show'));
-
-                // 事件处理
-                const close = (result) => {
-                    modal.classList.remove('show');
-                    setTimeout(() => {
-                        modal.remove();
-                        resolve(result);
-                    }, 200);
-                };
-
-                modal.querySelector('[data-action="confirm"]').onclick = () => close(true);
-                modal.querySelector('[data-action="cancel"]').onclick = () => close(false);
-                modal.querySelector('.confirm-modal-backdrop').onclick = () => close(false);
-            });
         }
 
         // === Theme Management ===

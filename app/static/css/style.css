@@ -579,8 +579,8 @@ button { font-family: inherit; cursor: pointer; }
 
 /* 标签栏 */
 .tags-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.tag-input-inline { border: 1px solid var(--slate-200); border-radius: 4px; padding: 4px 8px; font-size: 13px; width: 150px; outline: none; transition: border 0.2s; }
-.tag-input-inline:focus { border-color: var(--primary); }
+.tag-input-inline { border: 1px solid var(--slate-200); border-radius: 16px; padding: 4px 10px; font-size: 13px; width: 100px; outline: none; transition: border 0.2s, background 0.2s; background: var(--slate-50); }
+.tag-input-inline:focus { border-color: var(--primary); background: white; }
 
 /* ============================================================
    6. 笔记卡片
@@ -1545,35 +1545,55 @@ input:checked + .slider:before { transform: translateX(20px); }
     /* --- 布局 --- */
     .app-layout { padding: 0; background-color: #F6F7F9; }
     .app-container { padding: 0; gap: 0; display: block; }
-    .main-stream { width: 100%; max-width: 100%; padding: 20px 5% 90px 5%; }
+    .main-stream {
+        width: 100%;
+        max-width: 100%;
+        padding: 12px 5% 20px 5%;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        overflow: hidden;
+    }
 
-    /* --- 顶部栏 --- */
+    /* 顶部固定区域（搜索栏 + 编辑器） */
     .main-header {
-        position: sticky;
-        top: 0;
+        flex-shrink: 0;
         z-index: 50;
-        background: rgba(246, 247, 249, 0.95);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        margin: 0 -5% 20px -5%;
-        padding: 10px 5%;
+        background: transparent;
+        margin: 0;
+        padding: 0;
+        height: auto;
         gap: 12px;
         border-bottom: none;
+        box-shadow: none;
     }
+
+    /* 搜索栏样式 */
+    .header-search {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        padding: 10px 16px;
+        margin: 0;
+        flex: 1;
+        position: relative;
+    }
+    .header-search #searchInput {
+        background: transparent;
+        border: none;
+        padding: 0 0 0 28px;
+        height: auto;
+        font-size: 15px;
+    }
+    .header-search i {
+        left: 0;
+        font-size: 14px;
+        color: var(--slate-400);
+    }
+
     .header-left { flex-shrink: 0; color: var(--slate-800); }
     .header-left #mobileMenuBtn { font-size: 18px; color: #333; padding: 8px; margin: 0; }
     #currentDateDisplay { display: none; }
-    .header-search { flex: 1; margin: 0; position: relative; }
-    .header-search #searchInput {
-        background: #EAECEF;
-        border: none;
-        border-radius: 20px;
-        padding: 8px 12px 8px 36px;
-        color: var(--slate-800);
-        font-size: 14px;
-        height: 36px;
-    }
-    .header-search i { color: #999; left: 12px; top: 50%; transform: translateY(-50%); position: absolute; }
 
     /* 移动端菜单按钮 */
     .mobile-menu-btn { display: inline-block; }
@@ -1669,16 +1689,35 @@ input:checked + .slider:before { transform: translateX(20px); }
     .sidebar-mobile-close:hover { background: var(--slate-200); color: var(--slate-700); }
 
     /* --- 编辑器 --- */
-    .memo-editor, .note-card {
+    .memo-editor {
+        flex-shrink: 0;
         background: white;
         border-radius: 12px;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-        border: 1px solid rgba(0,0,0,0.02);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        border: none;
+        margin-top: 12px;
+        margin-bottom: 12px;
+        padding: 16px;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .note-card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        border: none;
         margin-bottom: 16px;
         padding: 16px;
     }
 
-    .memo-editor { padding-bottom: 12px; }
+    /* 笔记列表区域 - 单独滚动 */
+    .notes-stream {
+        flex: 1;
+        overflow-y: auto;
+        padding-top: 8px;
+        padding-bottom: 20px;
+    }
+
     #noteContent { font-size: 16px; min-height: 80px; }
 
     .editor-footer {
@@ -1688,9 +1727,34 @@ input:checked + .slider:before { transform: translateX(20px); }
         flex-direction: row;
         gap: 0;
     }
-    .editor-tools { gap: 12px; padding: 0; overflow: visible; }
+    .editor-tools {
+        gap: 8px;
+        padding: 0;
+        overflow: visible;
+        flex: 1;
+        display: flex;
+        align-items: center;
+    }
     .tool-btn { padding: 6px; color: #999; font-size: 16px; background: transparent; }
     .tool-btn:hover { color: var(--primary); background: transparent; }
+
+    /* 标签输入框 - 手机端直接显示 */
+    .tag-input-inline {
+        display: inline-block !important;
+        width: 80px;
+        padding: 5px 10px;
+        font-size: 13px;
+    }
+
+    /* #按钮 - 手机端作为添加按钮 */
+    #toggleTagInputBtn {
+        color: var(--primary);
+        font-size: 14px;
+        padding: 6px 10px;
+        background: var(--primary-light);
+        border-radius: 16px;
+    }
+
     .editor-actions { width: auto; margin-top: 0; gap: 12px; }
     .public-switch { margin-right: 0; }
 
@@ -1708,11 +1772,23 @@ input:checked + .slider:before { transform: translateX(20px); }
     .btn-send::after { content: none; }
     .btn-send i { font-size: 18px; margin: 0; }
 
-    /* 紧凑编辑器 */
-    .memo-editor.compact { padding: 12px 16px; }
-    .memo-editor.compact #noteContent { min-height: 40px; font-size: 14px; }
-    .memo-editor.compact .editor-footer { margin-top: 8px; padding-top: 8px; }
+    /* 紧凑编辑器 - 收窄但保持舒���输入高度 */
+    .memo-editor.compact {
+        padding: 10px 16px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+    .memo-editor.compact #noteContent {
+        min-height: 48px;
+        max-height: 60px;
+        font-size: 15px;
+    }
+    .memo-editor.compact .editor-footer {
+        margin-top: 6px;
+        padding-top: 6px;
+    }
     .memo-editor.compact .tags-bar { display: none; }
+    .memo-editor.compact .tag-input-inline { display: none !important; }
+    .memo-editor.compact #toggleTagInputBtn { display: none; }
 
     /* --- 笔记卡片 --- */
     .note-header { margin-bottom: 8px; padding-bottom: 0; border-bottom: none; }

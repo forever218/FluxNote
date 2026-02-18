@@ -14,6 +14,71 @@ export function showToast(message) {
     }
 }
 
+export function showConfirm(arg1, arg2) {
+    return new Promise((resolve) => {
+        let title, message, confirmText, cancelText, type;
+
+        // 兼容两种调用方式：
+        // showConfirm(message, options) 或 showConfirm(title, message)
+        if (typeof arg2 === 'string') {
+            // 旧方式: showConfirm(title, message)
+            title = arg1;
+            message = arg2;
+            confirmText = '确定';
+            cancelText = '取消';
+            type = 'danger';
+        } else {
+            // 新方式: showConfirm(message, options)
+            message = arg1;
+            const options = arg2 || {};
+            title = options.title || '确认操作';
+            confirmText = options.confirmText || '确定';
+            cancelText = options.cancelText || '取消';
+            type = options.type || 'warning';
+        }
+
+        // Remove existing modal
+        const existing = document.querySelector('.confirm-modal');
+        if (existing) existing.remove();
+
+        const modal = document.createElement('div');
+        modal.className = 'confirm-modal';
+        modal.innerHTML = `
+            <div class="confirm-modal-backdrop"></div>
+            <div class="confirm-modal-content">
+                <div class="confirm-modal-header">
+                    <i class="confirm-modal-icon fas fa-exclamation-triangle" style="color: ${type === 'danger' ? '#ef4444' : '#f59e0b'}"></i>
+                    <h3>${title}</h3>
+                </div>
+                <div class="confirm-modal-body">${message}</div>
+                <div class="confirm-modal-footer">
+                    <button class="btn btn-secondary cancel-btn">${cancelText}</button>
+                    <button class="btn ${type === 'danger' ? 'btn-danger' : 'btn-primary'} confirm-btn">${confirmText}</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // Show animation
+        requestAnimationFrame(() => modal.classList.add('show'));
+
+        const close = (result) => {
+            modal.classList.remove('show');
+            setTimeout(() => modal.remove(), 250);
+            resolve(result);
+        };
+
+        modal.querySelector('.cancel-btn').onclick = () => close(false);
+        modal.querySelector('.confirm-btn').onclick = () => close(true);
+        modal.querySelector('.confirm-modal-backdrop').onclick = () => close(false);
+    });
+}
+
+// 挂载到全局，供非 module 脚本使用
+window.showConfirm = showConfirm;
+window.showToast = showToast;
+
 export function debounce(func, wait) {
     let timeout;
     return function(...args) {

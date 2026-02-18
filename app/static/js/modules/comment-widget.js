@@ -186,7 +186,8 @@ function createReplyHtml(reply) {
 }
 
 async function deleteComment(id) {
-    if (!confirm('确定要删除这条评论吗？')) return;
+    const confirmed = await window.showConfirm('确定要删除这条评论吗？', { title: '删除评论', type: 'danger' });
+    if (!confirmed) return;
     try {
         const response = await fetch(`/api/comments/${id}`, { method: 'DELETE' });
         if (response.ok) {
