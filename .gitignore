@@ -44,7 +44,7 @@ htmlcov/
 # 工具与本地设置
 .cursor/
 .claude/
-
+.gemini/
 # 日志文件
 *.log
 
@@ -57,3 +57,4 @@ $PROFILE.txt
 GEMINI.md
 app/templates/themes/anheyu/
 nul
+cl.ps1

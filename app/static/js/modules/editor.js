@@ -13,6 +13,7 @@ export const editor = {
         this.setupSlashCommands(textarea);
         this.setupPasteImage(textarea);
         this.setupAITools(textarea);
+        this.setupAutoHeight(textarea);
     },
 
     setupAutoSave(textarea) {
@@ -169,6 +170,9 @@ export const editor = {
     setupSlashCommands(textarea) {
         let dropdown = null;
 
+        // AI 命令教程提示
+        this.setupCommandTutorial(textarea);
+
         const commands = [
             { label: '一级标题', value: '# ', icon: 'fas fa-heading', match: 'h1' },
             { label: '二级标题', value: '## ', icon: 'fas fa-heading', match: 'h2' },
@@ -204,9 +208,9 @@ export const editor = {
                 if (filtered.length > 0) {
                     dropdown.innerHTML = filtered.map((c, i) => `
                         <div class="ac-item" data-idx="${i}">
-                            <i class="${c.icon}" style="width:20px; color:#888;"></i> 
-                            <span style="font-weight:600; margin-right:8px;">/${c.match}</span> 
-                            <span style="font-size:12px; color:#aaa;">${c.label}</span>
+                            <i class="${c.icon}"></i>
+                            <span class="command-key">/${c.match}</span>
+                            <span class="command-label">${c.label}</span>
                         </div>
                     `).join('');
 
@@ -235,11 +239,142 @@ export const editor = {
         document.addEventListener('click', (e) => {
             if (dropdown && e.target !== textarea && !dropdown.contains(e.target)) {
                 dropdown.style.display = 'none';
+                activeIndex = -1;
             }
         });
-        
-        // Handle Tab/Enter key navigation in dropdown? 
-        // For simplicity, sticking to click or exact match handling could be added later.
+
+        // 添加下拉菜单键盘导航
+        let activeIndex = -1;
+        const updateActiveItem = (index) => {
+            if (!dropdown || dropdown.style.display === 'none') return;
+
+            // 移除所有active状态
+            dropdown.querySelectorAll('.ac-item').forEach(item => {
+                item.classList.remove('active');
+            });
+
+            // 设置新的active状态
+            const items = dropdown.querySelectorAll('.ac-item');
+            if (items.length > 0) {
+                activeIndex = (index + items.length) % items.length;
+                items[activeIndex].classList.add('active');
+                // 滚动到当前选中项
+                items[activeIndex].scrollIntoView({ block: 'nearest' });
+            }
+        };
+
+        // 为下拉菜单添加键盘事件
+        const handleDropdownKeydown = (e) => {
+            if (!dropdown || dropdown.style.display === 'none') return;
+
+            const items = dropdown.querySelectorAll('.ac-item');
+            if (items.length === 0) return;
+
+            switch(e.key) {
+                case 'ArrowDown':
+                case 'ArrowUp':
+                    e.preventDefault();
+                    if (activeIndex === -1) {
+                        // 首次按下方向键
+                        updateActiveItem(e.key === 'ArrowDown' ? 0 : items.length - 1);
+                    } else {
+                        // 移动选择
+                        updateActiveItem(activeIndex + (e.key === 'ArrowDown' ? 1 : -1));
+                    }
+                    break;
+                case 'Enter':
+                    e.preventDefault();
+                    if (activeIndex >= 0 && activeIndex < items.length) {
+                        items[activeIndex].click();
+                    } else if (items.length > 0) {
+                        items[0].click();
+                    }
+                    break;
+                case 'Escape':
+                    e.preventDefault();
+                    dropdown.style.display = 'none';
+                    activeIndex = -1;
+                    break;
+            }
+        };
+
+        // 全局键盘监听
+        document.addEventListener('keydown', handleDropdownKeydown);
+
+        // 当下拉菜单显示时，聚焦到第一个项目
+        const showDropdown = () => {
+            if (dropdown && dropdown.style.display === 'block') {
+                activeIndex = -1;
+                const items = dropdown.querySelectorAll('.ac-item');
+                if (items.length > 0) {
+                    updateActiveItem(0);
+                }
+            }
+        };
+
+        // 简化显示逻辑：在显示下拉时直接调用
+        const safeShowDropdown = () => {
+            if (dropdown) {
+                setTimeout(showDropdown, 0);
+            }
+        };
+
+        // 在输入事件中显示下拉后调用
+        textarea.addEventListener('input', () => {
+            if (dropdown && dropdown.style.display === 'block') {
+                safeShowDropdown();
+            }
+        });
+
+        // Handle Enter key to auto-apply command when typing
+        textarea.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && dropdown && dropdown.style.display === 'block') {
+                e.preventDefault();
+                const items = dropdown.querySelectorAll('.ac-item');
+                if (items.length > 0) {
+                    if (activeIndex >= 0 && activeIndex < items.length) {
+                        items[activeIndex].click();
+                    } else {
+                        items[0].click();
+                    }
+                }
+            }
+        });
+
+        // Handle Enter key for direct command execution (without dropdown)
+        textarea.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && (!dropdown || dropdown.style.display === 'none')) {
+                const cursor = textarea.selectionStart;
+                const textBefore = textarea.value.substring(0, cursor);
+                const match = textBefore.match(/(?:^|[\s\n])(\/([a-z0-9]+))$/i);
+
+                if (match) {
+                    e.preventDefault();
+                    const slashCmd = match[1];
+                    const commandName = match[2].toLowerCase();
+
+                    // Find matching command
+                    const matchingCommand = commands.find(cmd => cmd.match === commandName);
+                    if (matchingCommand) {
+                        this.executeSlashCommand(textarea, matchingCommand, slashCmd, cursor);
+                        // 重置activeIndex
+                        activeIndex = -1;
+                    }
+                }
+            }
+        });
+
+        // 清理函数
+        const cleanup = () => {
+            document.removeEventListener('keydown', handleDropdownKeydown);
+            if (dropdown) {
+                dropdown.removeEventListener('mousedown', (e) => e.preventDefault());
+            }
+            activeIndex = -1;
+        };
+
+        // 在页面卸载时清理
+        window.addEventListener('unload', cleanup);
     },
 
     executeSlashCommand(textarea, cmd, matchStr, cursor) {
@@ -526,5 +661,84 @@ export const editor = {
             contentDiv.textContent = "请求出错: " + e.message;
             setTimeout(() => previewBox.remove(), 3000);
         }
+    },
+
+    // AI 命令提示教程
+    setupCommandTutorial(textarea) {
+        // 检查是否已经显示过教程
+        if (sessionStorage.getItem('ai_tutorial_shown')) {
+            return;
+        }
+
+        // 设置标记，避免重复显示
+        sessionStorage.setItem('ai_tutorial_shown', 'true');
+
+        // 添加一次性的聚焦事件监听器
+        textarea.addEventListener('focus', () => {
+            // 创建提示元素
+            const hint = document.createElement('div');
+            hint.className = 'slash-command-hint';
+            hint.innerHTML = '<span>尝试输入 <code>/</code> 体验AI助手</span>';
+
+            // 找到编辑器容器
+            const editorContainer = textarea.closest('.memo-editor') || textarea.closest('.inline-editor-container');
+            if (editorContainer) {
+                editorContainer.appendChild(hint);
+
+                // 3秒后自动移除
+                setTimeout(() => {
+                    if (hint.parentNode) {
+                        hint.parentNode.removeChild(hint);
+                    }
+                }, 3000);
+            }
+        }, { once: true });
+    },
+
+    setupAutoHeight(textarea) {
+        // 防止重复绑定
+        if (textarea.dataset.autoHeightInitialized) return;
+
+        textarea.dataset.autoHeightInitialized = 'true';
+
+        const maxHeight = parseInt(getComputedStyle(textarea).maxHeight, 10) || 600;
+
+        const adjustHeight = () => {
+            // 保存当前滚动位置
+            const scrollTop = textarea.scrollTop;
+
+            // 临时移除最大高度限制以获取真实内容高度
+            const originalMaxHeight = textarea.style.maxHeight;
+            textarea.style.maxHeight = 'none';
+
+            // 设置高度为内容高度
+            textarea.style.height = 'auto';
+            const contentHeight = textarea.scrollHeight;
+
+            // 恢复最大高度限制
+            textarea.style.maxHeight = originalMaxHeight;
+
+            // 应用新高度，不超过最大高度
+            const newHeight = Math.min(contentHeight, maxHeight);
+            textarea.style.height = `${newHeight}px`;
+
+            // 恢复滚动位置
+            textarea.scrollTop = scrollTop;
+        };
+
+        // 初始调整
+        adjustHeight();
+
+        // 监听输入事件
+        textarea.addEventListener('input', adjustHeight);
+
+        // 监听窗口大小变化
+        window.addEventListener('resize', adjustHeight);
+
+        // 监听粘贴事件
+        textarea.addEventListener('paste', () => setTimeout(adjustHeight, 50));
+
+        // 监听焦点事件，确保在聚焦时高度正确
+        textarea.addEventListener('focus', adjustHeight);
     }
 };

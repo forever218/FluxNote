@@ -370,27 +370,160 @@ function initGlobalEvents() {
         });
     }
 
-    // Compact Editor on Scroll (Mobile) - 监听笔记列表区域滚动
+    // Precise Editor Auto-Resize System
     const memoEditor = document.querySelector('.memo-editor');
     const notesStream = document.querySelector('.notes-stream');
+    const textarea = document.getElementById('noteContent');
     let lastScrollTop = 0;
+    let lastUserAction = 'none'; // 'scroll_top', 'click_notes', 'manual_expand'
+    let isManuallyExpanded = false;
+    let scrollLock = false;
+    let actionCooldown = 0;
+    let lastClickTime = 0;
+
+    // Track user typing activity
+    if (textarea) {
+        textarea.addEventListener('input', () => {
+            isManuallyExpanded = true;
+            if (memoEditor && memoEditor.classList.contains('compact')) {
+                memoEditor.classList.remove('compact');
+            }
+            lastUserAction = 'manual_expand';
+        });
+
+        textarea.addEventListener('focus', () => {
+            isManuallyExpanded = true;
+            if (memoEditor) memoEditor.classList.remove('compact');
+            lastUserAction = 'manual_expand';
+        });
+    }
 
     if (notesStream && memoEditor) {
-        notesStream.addEventListener('scroll', () => {
-            if (window.innerWidth <= 900 && memoEditor.style.display !== 'none') {
-                const currentScrollTop = notesStream.scrollTop;
+        // Precise state logic
+        const updateEditorState = () => {
+            if (window.innerWidth > 900) {
+                memoEditor.classList.remove('compact');
+                return;
+            }
 
-                if (currentScrollTop > 50 && currentScrollTop > lastScrollTop) {
-                    // 向下滚动 - 收缩编辑器
+            const now = Date.now();
+            if (now < actionCooldown) return;
+
+            const currentScrollTop = notesStream.scrollTop;
+            const scrollDirection = currentScrollTop > lastScrollTop ? 'down' : 'up';
+            const noteCount = document.querySelectorAll('.note-card').length;
+            const viewportHeight = window.innerHeight;
+            const editorHeight = memoEditor.offsetHeight;
+
+            memoEditor.style.transition = 'height 0.3s ease, transform 0.3s ease';
+
+            // Rule 1: Only expand when scrolled to very top (within 30px of top)
+            if (currentScrollTop <= 30 && scrollDirection === 'up') {
+                if (memoEditor.classList.contains('compact')) {
+                    memoEditor.classList.remove('compact');
+                    isManuallyExpanded = false; // Reset manual state when auto-expanded at top
+                    actionCooldown = now + 800;
+                }
+                lastUserAction = 'scroll_top';
+            }
+            // Rule 2: Compact when scrolled down significantly OR when clicking note stream
+            else if ((currentScrollTop > 80 && noteCount > 1) || lastUserAction === 'click_notes') {
+                if (!memoEditor.classList.contains('compact')) {
                     memoEditor.classList.add('compact');
-                } else if (currentScrollTop < lastScrollTop - 10) {
-                    // 向上滚动 - 展开编辑器
+                    actionCooldown = now + 1000;
+                    scrollLock = true;
+                    setTimeout(() => { scrollLock = false; }, 1200);
+                }
+                if (lastUserAction === 'click_notes') {
+                    lastUserAction = 'none';
+                }
+            }
+            // Rule 3: If manually expanded, stay expanded unless scrolled far down
+            else if (isManuallyExpanded) {
+                if (currentScrollTop > 200) {
+                    memoEditor.classList.add('compact');
+                    isManuallyExpanded = false;
+                    actionCooldown = now + 800;
+                } else {
                     memoEditor.classList.remove('compact');
                 }
+            }
 
-                lastScrollTop = currentScrollTop;
+            lastScrollTop = currentScrollTop;
+        };
+
+        // Optimized scroll handler
+        let isScrolling = false;
+        const handleScroll = () => {
+            if (scrollLock || window.innerWidth > 900) return;
+
+            if (!isScrolling) {
+                isScrolling = true;
+                requestAnimationFrame(() => {
+                    updateEditorState();
+                    isScrolling = false;
+                });
+            }
+        };
+
+        // Handle clicks on note stream to compact editor
+        document.addEventListener('click', (e) => {
+            const now = Date.now();
+            // Prevent rapid clicks
+            if (now - lastClickTime < 300) return;
+
+            lastClickTime = now;
+
+            // Check if click is on note stream but not on editor or its children
+            if (notesStream.contains(e.target) &&
+                !memoEditor.contains(e.target) &&
+                e.target !== textarea) {
+
+                // Only compact if editor is visible and expanded
+                if (memoEditor && !memoEditor.classList.contains('compact')) {
+                    lastUserAction = 'click_notes';
+                    actionCooldown = now + 500;
+                    // Force immediate update
+                    memoEditor.style.transition = 'height 0.3s ease, transform 0.3s ease';
+                    memoEditor.classList.add('compact');
+                }
             }
         });
+
+        // Touch handling for mobile
+        document.addEventListener('touchstart', (e) => {
+            if (memoEditor.contains(e.target) && memoEditor.classList.contains('compact')) {
+                isManuallyExpanded = true;
+                lastUserAction = 'manual_expand';
+            }
+        });
+
+        // Window resize handling
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+                if (window.innerWidth > 900) {
+                    memoEditor.classList.remove('compact');
+                    isManuallyExpanded = false;
+                } else {
+                    updateEditorState();
+                }
+            }, 200);
+        });
+
+        // Initial setup
+        notesStream.addEventListener('scroll', handleScroll);
+
+        // Initial evaluation
+        setTimeout(() => {
+            if (window.innerWidth <= 900) {
+                memoEditor.style.transition = 'height 0.4s ease, transform 0.4s ease';
+                if (document.querySelectorAll('.note-card').length > 2) {
+                    memoEditor.classList.add('compact');
+                }
+            }
+        }, 500);
     }
 
     // Search
