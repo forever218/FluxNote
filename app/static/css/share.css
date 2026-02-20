@@ -147,3 +147,209 @@ body {
     text-decoration: none;
     border-bottom: 1px dashed;
 }
+
+/* === New Styles for Optimized Features === */
+
+/* Loading spinner */
+.loading-spinner {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    color: var(--slate-500);
+}
+
+.loading-spinner i {
+    margin-right: 8px;
+}
+
+/* Error and empty messages */
+.error-message {
+    color: #ef4444;
+    padding: 20px;
+    text-align: center;
+}
+
+.empty-message {
+    color: #94a3b8;
+    padding: 20px;
+    text-align: center;
+}
+
+/* Version modal improvements */
+.version-item {
+    padding: 16px;
+    border-bottom: 1px solid #f1f5f9;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.version-item:hover {
+    background-color: #f8fafc;
+}
+
+.version-item.selected {
+    background-color: #f0fdf4;
+    border-left: 3px solid var(--primary);
+}
+
+.version-info {
+    flex: 1;
+}
+
+.version-date {
+    font-weight: 600;
+    color: var(--slate-800);
+    margin-bottom: 4px;
+    display: block;
+}
+
+.version-meta {
+    color: var(--slate-500);
+    font-size: 0.875rem;
+    display: block;
+}
+
+.version-summary {
+    color: var(--slate-600);
+    font-size: 0.875rem;
+    margin-top: 6px;
+    line-height: 1.5;
+    max-height: 4.5em; /* 3 lines */
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.summary-loading {
+    color: var(--slate-400);
+    font-style: italic;
+}
+
+.error-text {
+    color: #ef4444;
+}
+
+.version-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Version preview area */
+#versionPreview {
+    display: none;
+}
+
+.version-preview-header {
+    padding: 20px;
+    border-bottom: 1px solid #f1f5f9;
+    background: #ffffff;
+}
+
+.version-preview-header h3 {
+    margin: 0 0 8px 0;
+    color: var(--slate-800);
+    font-size: 1.25rem;
+}
+
+.version-meta-info {
+    display: flex;
+    gap: 16px;
+    color: var(--slate-500);
+    font-size: 0.875rem;
+}
+
+.version-author {
+    color: var(--slate-400);
+}
+
+.version-preview-content {
+    padding: 20px;
+    overflow-y: auto;
+    max-height: 60vh;
+}
+
+/* Share modal improvements */
+.share-form-section {
+    padding: 20px;
+    background: #f8fafc;
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.share-url-section {
+    display: none;
+    padding: 20px;
+    background: #f0fdf4;
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.share-form-group {
+    margin-bottom: 16px;
+}
+
+.share-form-label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+    color: var(--slate-700);
+}
+
+.share-form-control {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 1rem;
+    transition: border-color 0.2s;
+}
+
+.share-form-control:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.share-password-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.share-btn-group {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+/* Responsive layout for modals */
+@media (min-width: 768px) {
+    #versionModal .modal-content {
+        display: flex;
+        gap: 24px;
+    }
+
+    #versionList {
+        flex: 1;
+        max-height: 70vh;
+        overflow-y: auto;
+    }
+
+    #versionPreview {
+        flex: 1;
+        display: none;
+    }
+
+    #versionPreview.active {
+        display: flex;
+        flex-direction: column;
+    }
+}
+
+@media (max-width: 767px) {
+    .version-preview-content {
+        max-height: 40vh;
+    }
+}

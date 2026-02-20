@@ -75,7 +75,7 @@ export const ui = {
         }
 
         const nodesToRender = [];
-        
+
         blocks.forEach(block => {
             const isMindmap = block.classList.contains('language-mindmap');
             let rawCode = block.textContent;
@@ -84,21 +84,21 @@ export const ui = {
             const txt = document.createElement("textarea");
             txt.innerHTML = rawCode;
             rawCode = txt.value;
-            
+
             // If it's a mindmap block and doesn't start with the keyword, prepend it
             if (isMindmap && !rawCode.trim().startsWith('mindmap')) {
                 rawCode = 'mindmap\n' + rawCode;
             }
 
             const pre = block.parentElement;
-            
+
             // Create a div for mermaid
             const div = document.createElement('div');
             div.className = 'mermaid';
             div.textContent = rawCode;
             div.style.textAlign = 'center'; // Center the diagram
             div.style.background = 'transparent'; // Ensure transparent bg
-            
+
             // Replace the <pre> block with the new <div>
             if (pre && pre.parentNode) {
                 pre.parentNode.replaceChild(div, pre);
@@ -108,9 +108,26 @@ export const ui = {
 
         if (nodesToRender.length > 0) {
             try {
+                // Ensure container is visible before rendering
+                const containerRect = container.getBoundingClientRect ? container.getBoundingClientRect() : { width: 1, height: 1 };
+                if (containerRect.width === 0 || containerRect.height === 0) {
+                    console.warn('Container not visible, delaying Mermaid render');
+                    setTimeout(() => this.renderMermaid(container), 100);
+                    return;
+                }
+
                 await mermaid.run({ nodes: nodesToRender });
             } catch (e) {
                 console.error('Mermaid rendering failed', e);
+                // Fallback: show original code blocks with error comment
+                nodesToRender.forEach(div => {
+                    const pre = document.createElement('pre');
+                    const code = document.createElement('code');
+                    code.className = div.className.includes('mindmap') ? 'language-mindmap' : 'language-mermaid';
+                    code.textContent = div.textContent + '\n\n/* Mermaid rendering failed - showing raw code */';
+                    pre.appendChild(code);
+                    div.replaceWith(pre);
+                });
             }
         }
     },

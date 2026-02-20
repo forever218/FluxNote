@@ -780,7 +780,7 @@ function initGlobalEvents() {
         if (modal) {
             modal.style.display = 'block';
             list.innerHTML = '加载中...';
-            preview.style.display = 'none';
+            if (preview) preview.style.display = 'none';
 
             modal.querySelector('.close-version').onclick = () => modal.style.display = 'none';
             window.onclick = (ev) => { if(ev.target === modal) modal.style.display = 'none'; };
@@ -810,10 +810,45 @@ function initGlobalEvents() {
                         const v = JSON.parse(btn.dataset.json);
                         let content = v.content;
                         try {
-                            if (typeof marked !== 'undefined') content = DOMPurify.sanitize(marked.parse(content));
-                        } catch(e) {}
-                        preview.innerHTML = `<div class="version-preview-header">预览版本: ${v.created_at}</div>` + content;
-                        preview.style.display = 'block';
+                            if (typeof marked !== 'undefined') {
+                                // 处理wiki链接
+                                if (typeof parseWikiLinks !== 'undefined') {
+                                    content = parseWikiLinks(content);
+                                }
+                                let html = marked.parse(content);
+                                if (typeof DOMPurify !== 'undefined') {
+                                    html = DOMPurify.sanitize(html);
+                                }
+                                // 渲染Mermaid图表
+                                if (ui && ui.renderMermaid) {
+                                    const tempDiv = document.createElement('div');
+                                    tempDiv.innerHTML = html;
+                                    ui.renderMermaid(tempDiv);
+                                    html = tempDiv.innerHTML;
+                                }
+                                // 高亮代码
+                                if (typeof hljs !== 'undefined') {
+                                    const tempDiv = document.createElement('div');
+                                    tempDiv.innerHTML = html;
+                                    tempDiv.querySelectorAll('pre code').forEach(block => {
+                                        const isMermaid = block.classList.contains('language-mermaid') ||
+                                                         block.classList.contains('language-mindmap');
+                                        if (!isMermaid) {
+                                            hljs.highlightElement(block);
+                                        }
+                                    });
+                                    html = tempDiv.innerHTML;
+                                }
+                                preview.innerHTML = `<div class="version-preview-header">预览版本: ${v.created_at}</div>` + html;
+                            } else {
+                                preview.innerHTML = `<div class="version-preview-header">预览版本: ${v.created_at}</div>` + content.replace(/[#*`[\]]/g, '');
+                            }
+                            preview.style.display = 'block';
+                        } catch(e) {
+                            console.error('预览渲染失败:', e);
+                            preview.innerHTML = `<div class="version-preview-header">预览版本: ${v.created_at}</div>` + content;
+                            preview.style.display = 'block';
+                        }
                     };
                 });
 
@@ -853,12 +888,12 @@ function initGlobalEvents() {
         if (cardTitle) {
             // Optimize title display: Always try to clean the title, whether from DB or content
             let titleText = note.title;
-            
+
             // If no title, extract from content
             if (!titleText) {
                 titleText = note.content.split('\n')[0].trim();
             }
-            
+
             // Apply cleaning to titleText (whether from DB or extracted)
             if (titleText) {
                 // Strip common markdown markers (#, ##, - [ ], - [x], *, -, 1.)
@@ -866,25 +901,8 @@ function initGlobalEvents() {
                 // Truncate if too long
                 if (titleText.length > 50) titleText = titleText.substring(0, 50) + '...';
             }
-            
+
             cardTitle.textContent = titleText || '无标题';
-        }
-
-        // 生成分享链接
-        const res = await api.share.create({
-            note_id: noteId,
-            expires_in: 0  // 默认永久
-        });
-
-        if (res && res.ok) {
-            const data = await res.json();
-            const shareUrl = document.getElementById('shareUrl');
-            shareUrl.value = window.location.origin + data.share.url;
-            shareUrl.dataset.shareId = data.share.id;
-            shareUrl.dataset.noteId = noteId;  // 保存 noteId
-        } else {
-            showToast('创建分享失败');
-            return;
         }
 
         // 先显示模态框，确保 Mermaid 能正确计算尺寸
@@ -893,7 +911,7 @@ function initGlobalEvents() {
         // 渲染 Markdown 内容 (Moved logic here to run after modal is visible)
         if (cardContent) {
             let content = note.content;
-            
+
             // 解析 Markdown
             try {
                 if (typeof marked !== 'undefined') {
@@ -916,7 +934,7 @@ function initGlobalEvents() {
                     // 高亮代码
                     if (typeof hljs !== 'undefined') {
                         cardContent.querySelectorAll('pre code').forEach(block => {
-                            const isMermaid = block.classList.contains('language-mermaid') || 
+                            const isMermaid = block.classList.contains('language-mermaid') ||
                                              block.classList.contains('language-mindmap');
                             if (!isMermaid) {
                                 hljs.highlightElement(block);
@@ -944,11 +962,11 @@ function initGlobalEvents() {
             cardTags.style.display = 'none';
         }
 
-        // 重置表单
+        // 重置表单 - 现在启用所有表单字段
         document.getElementById('sharePassword').value = '';
-        document.getElementById('sharePassword').disabled = true;
+        document.getElementById('sharePassword').disabled = false; // 启用密码输入框
         document.getElementById('sharePasswordEnabled').checked = false;
-        document.getElementById('shareExpires').value = '0';
+        document.getElementById('shareExpires').value = '0'; // 默认永久有效
 
         // 关闭按钮
         modal.querySelector('.close-share').onclick = () => modal.style.display = 'none';
@@ -957,7 +975,138 @@ function initGlobalEvents() {
         // 密码开关
         document.getElementById('sharePasswordEnabled').onchange = (ev) => {
             document.getElementById('sharePassword').disabled = !ev.target.checked;
+            // 如果禁用密码，清空密码字段
+            if (!ev.target.checked) {
+                document.getElementById('sharePassword').value = '';
+            }
         };
+
+        // 创建分享按钮事件处理
+        const createShareBtn = document.getElementById('createShare');
+        const updateShareBtn = document.getElementById('updateShare');
+        const shareUrlInput = document.getElementById('shareUrl');
+
+        // 隐藏更新按钮，显示创建按钮
+        if (updateShareBtn) updateShareBtn.style.display = 'none';
+        if (createShareBtn) createShareBtn.style.display = 'inline-block';
+
+        // 清空分享URL
+        if (shareUrlInput) {
+            shareUrlInput.value = '';
+            shareUrlInput.dataset.shareId = '';
+            shareUrlInput.dataset.noteId = noteId;
+        }
+
+        // 创建分享按钮点击事件
+        if (createShareBtn) {
+            createShareBtn.onclick = async () => {
+                const passwordEnabled = document.getElementById('sharePasswordEnabled').checked;
+                const password = passwordEnabled ? document.getElementById('sharePassword').value.trim() : '';
+                const expires = document.getElementById('shareExpires').value;
+
+                // 表单验证
+                if (passwordEnabled && password.length < 4) {
+                    showToast('密码至少需要4个字符');
+                    return;
+                }
+
+                // 设置有效期
+                let expiresIn = null;
+                if (expires === '24') expiresIn = 24;
+                else if (expires === '168') expiresIn = 168;
+                else if (expires === '720') expiresIn = 720;
+                // '0' 表示永久有效
+
+                try {
+                    createShareBtn.disabled = true;
+                    createShareBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 创建中...';
+
+                    // 创建分享链接
+                    const res = await api.share.create({
+                        note_id: noteId,
+                        password: passwordEnabled ? password : '',
+                        expires_in: expiresIn
+                    });
+
+                    if (res && res.ok) {
+                        const data = await res.json();
+                        if (shareUrlInput) {
+                            shareUrlInput.value = window.location.origin + data.share.url;
+                            shareUrlInput.dataset.shareId = data.share.id;
+
+                            // 显示URL区域
+                            const urlSection = document.getElementById('shareUrlSection');
+                            if (urlSection) urlSection.style.display = 'block';
+
+                            // 显示操作按钮
+                            if (updateShareBtn) {
+                                updateShareBtn.style.display = 'inline-block';
+                                createShareBtn.style.display = 'none';
+                            }
+
+                            showToast('分享链接创建成功');
+                        }
+                    } else {
+                        const errorData = await res.json();
+                        showToast(errorData.message || '创建分享失败');
+                    }
+                } catch (err) {
+                    console.error('创建分享失败:', err);
+                    showToast('网络错误，请重试');
+                } finally {
+                    createShareBtn.disabled = false;
+                    createShareBtn.innerHTML = '<i class="fas fa-link"></i> 创建分享链接';
+                }
+            };
+        }
+
+        // 更新分享按钮事件处理（保持原有逻辑）
+        if (updateShareBtn) {
+            updateShareBtn.onclick = async () => {
+                const shareId = shareUrlInput?.dataset.shareId;
+                if (!shareId) return;
+
+                const passwordEnabled = document.getElementById('sharePasswordEnabled').checked;
+                const password = passwordEnabled ? document.getElementById('sharePassword').value.trim() : '';
+                const expires = document.getElementById('shareExpires').value;
+
+                // 表单验证
+                if (passwordEnabled && password.length < 4) {
+                    showToast('密码至少需要4个字符');
+                    return;
+                }
+
+                // 设置有效期
+                let expiresIn = null;
+                if (expires === '24') expiresIn = 24;
+                else if (expires === '168') expiresIn = 168;
+                else if (expires === '720') expiresIn = 720;
+
+                try {
+                    updateShareBtn.disabled = true;
+                    updateShareBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 更新中...';
+
+                    // 更新分享设置
+                    const res = await api.share.update(shareId, {
+                        password: passwordEnabled ? password : null,
+                        expires_in: expiresIn
+                    });
+
+                    if (res && res.ok) {
+                        showToast('分享设置已更新');
+                    } else {
+                        const errorData = await res.json();
+                        showToast(errorData.message || '更新失败');
+                    }
+                } catch (err) {
+                    console.error('更新分享失败:', err);
+                    showToast('网络错误，请重试');
+                } finally {
+                    updateShareBtn.disabled = false;
+                    updateShareBtn.innerHTML = '<i class="fas fa-sync-alt"></i> 更新设置';
+                }
+            };
+        }
     });
 
     // 复制分享链接
