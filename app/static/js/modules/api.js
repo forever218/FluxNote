@@ -1,21 +1,62 @@
 import { showToast } from './utils.js';
 
+// 离线状态管理
+let isOffline = false;
+
+export function checkOnlineStatus() {
+    return navigator.onLine;
+}
+
+window.addEventListener('online', () => {
+    if (isOffline) {
+        isOffline = false;
+        showToast('网络已恢复');
+        window.dispatchEvent(new CustomEvent('app:online'));
+    }
+});
+
+window.addEventListener('offline', () => {
+    isOffline = true;
+    showToast('当前处于离线模式');
+});
+
 export async function fetchJson(url, options = {}) {
     try {
         const response = await fetch(url, options);
+
+        // 检查是否为过期缓存数据
+        if (response.headers.get('X-Cache-Status') === 'stale') {
+            console.log('[API] Serving stale content from cache');
+            showToast('当前显示的是缓存数据，可能不是最新的');
+        }
+
+        // 检查是否是离线响应
+        if (response.status === 408) {
+            console.log('[API] Offline response for:', url);
+            return null;
+        }
+
         if (response.status === 401) {
-            // efficient way to handle unauthorized without circular dependency on auth UI
             window.dispatchEvent(new CustomEvent('auth:unauthorized'));
             return null;
         }
+
         if (!response.ok) {
             console.error(`HTTP error: ${response.status} ${response.statusText}`);
             return null;
         }
+
         return response;
     } catch (e) {
-        console.error("Fetch error:", e);
-        showToast('网络错误');
+        // 网络错误
+        console.log('[API] Network error:', url, e.message);
+        isOffline = true;
+
+        // 只对非认证请求显示 toast
+        if (!url.includes('/api/auth/')) {
+            showToast('网络连接失败');
+        }
+
         return null;
     }
 }

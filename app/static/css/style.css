@@ -1480,6 +1480,120 @@ input:checked + .slider:before { transform: translateX(20px); }
 }
 
 /* ============================================================
+   14. PWA 样式
+   ============================================================ */
+
+/* PWA 安装提示 */
+.pwa-install-prompt {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    z-index: 9999;
+    max-width: 90%;
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+.pwa-install-icon {
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, var(--primary) 0%, #059669 100%);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.pwa-install-icon i {
+    color: white;
+    font-size: 20px;
+}
+
+.pwa-install-content {
+    flex: 1;
+}
+
+.pwa-install-title {
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--slate-800);
+    margin-bottom: 4px;
+}
+
+.pwa-install-desc {
+    font-size: 13px;
+    color: var(--slate-500);
+}
+
+.pwa-install-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.pwa-install-actions .btn {
+    padding: 8px 16px;
+    font-size: 13px;
+}
+
+/* PWA 状态指示器 */
+.pwa-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--slate-400);
+    padding: 4px 8px;
+    background: var(--slate-50);
+    border-radius: 4px;
+}
+
+.pwa-status.online {
+    color: var(--primary);
+}
+
+.pwa-status.offline {
+    color: #EF4444;
+}
+
+.pwa-status i {
+    font-size: 10px;
+}
+
+/* PWA 启动画面背景 */
+@media (display-mode: standalone) {
+    .app-layout {
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
+    }
+
+    /* PWA 模式下隐藏浏览器相关元素 */
+    .header-brand-link {
+        display: none;
+    }
+}
+
+/* ============================================================
    10. Markdown 样式
    ============================================================ */
 

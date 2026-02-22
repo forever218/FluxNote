@@ -3,9 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- PWA Configuration -->
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#10B981">
+    <link rel="apple-touch-icon" href="/static/img/icons/apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    
     {% block meta %}
     <meta name="description" content="{{ site_desc }}">
     {% endblock %}
+    
     <title>{% block title %}{{ site_title }}{% endblock %}</title>
 
     <!-- 公共资源：所有主题共用 -->

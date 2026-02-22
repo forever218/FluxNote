@@ -66,12 +66,27 @@ def get_settings_by_keys():
 @settings_bp.route('/api/settings/update', methods=['POST'])
 @login_required
 def update_settings_batch():
-    """Batch update settings"""
+    """Batch update settings with whitelist validation"""
     data = request.json or {}
+    
+    # Define allowed configuration keys
+    ALLOWED_KEYS = {
+        'site_title', 'site_desc', 'blog_footer', 
+        'notify_email', 'smtp_server', 'smtp_port', 'smtp_user', 'smtp_password',
+        'keep_history', 'debug_mode'
+    }
+    
     try:
+        updated_count = 0
         for key, value in data.items():
-            Config.set(key, str(value))
-        return api_response(message='Settings updated')
+            if key in ALLOWED_KEYS:
+                Config.set(key, str(value))
+                updated_count += 1
+            else:
+                # Log or ignore invalid keys
+                pass
+                
+        return api_response(message=f'Settings updated ({updated_count} items)')
     except Exception as e:
         return api_response(code=500, message=str(e))
 

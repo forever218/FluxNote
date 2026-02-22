@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10B981;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- 背景 -->
+  <rect width="180" height="180" fill="url(#grad1)"/>
+
+  <!-- 笔记纸张 -->
+  <rect x="40" y="30" width="100" height="120" rx="8" ry="8" fill="white" opacity="0.95"/>
+
+  <!-- 笔记线条 -->
+  <line x1="55" y1="55" x2="125" y2="55" stroke="#E2E8F0" stroke-width="3" stroke-linecap="round"/>
+  <line x1="55" y1="80" x2="125" y2="80" stroke="#E2E8F0" stroke-width="3" stroke-linecap="round"/>
+  <line x1="55" y1="105" x2="110" y2="105" stroke="#E2E8F0" stroke-width="3" stroke-linecap="round"/>
+  <line x1="55" y1="130" x2="95" y2="130" stroke="#E2E8F0" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- 流光效果 -->
+  <path d="M135 50 Q150 70 135 100 Q120 130 145 150" stroke="#34D399" stroke-width="5" stroke-linecap="round" fill="none" opacity="0.7"/>
+</svg>

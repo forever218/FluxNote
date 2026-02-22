@@ -23,12 +23,21 @@ def update_note_tags(note, tag_names):
         if not name:
             continue
 
+        # Check existing first
         tag = Tag.query.filter_by(name=name).first()
         if not tag:
-            tag = Tag(name=name)
-            db.session.add(tag)
+            try:
+                # Optimistic create
+                tag = Tag(name=name)
+                db.session.add(tag)
+                # Flush to check for potential unique constraint violations immediately if configured
+                db.session.flush() 
+            except Exception:
+                # If race condition occurred, rollback partial transaction and re-fetch
+                db.session.rollback()
+                tag = Tag.query.filter_by(name=name).first()
 
-        if tag not in note.tags_list:
+        if tag and tag not in note.tags_list:
             note.tags_list.append(tag)
 
 def update_note_references(note, links_list):
@@ -209,18 +218,19 @@ def create_note():
         return jsonify(safe_error(e, '创建笔记失败')), 500
 
 @notes_bp.route('/notes/<note_id>', methods=['GET'])
-@login_required
 def get_note(note_id):
-    """Get a single note"""
+    """Get a single note (Public access allowed for public notes)"""
     try:
         note = db.session.get(Note, note_id)
         if not note:
             return jsonify({'error': '笔记不存在'}), 404
 
-        # Check permission (public notes are readable by everyone, but for editing we usually need owner)
-        # But this endpoint might be used for viewing too.
-        # Logic: If public, anyone can view. If private, only owner.
-        if not note.is_public and note.user_id != current_user.id:
+        # Check permission
+        if note.is_public:
+            return jsonify(note.to_dict())
+            
+        # Private note: requires login and owner check
+        if not current_user.is_authenticated or note.user_id != current_user.id:
             return jsonify({'error': '无权查看'}), 403
 
         return jsonify(note.to_dict())

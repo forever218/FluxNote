@@ -1,6 +1,9 @@
-import { api } from './api.js';
+import { api, checkOnlineStatus } from './api.js';
 import { state } from './state.js';
 import { showToast } from './utils.js';
+
+// 离线模式标记
+let offlineMode = false;
 
 // DOM Elements
 const authModal = document.getElementById('authModal');
@@ -17,6 +20,32 @@ let canRegister = true;
 
 export const auth = {
     async checkStatus(callbacks = {}) {
+        // 检查离线状态
+        if (!navigator.onLine) {
+            console.log('[Auth] Offline mode detected');
+            offlineMode = true;
+            // 尝试使用缓存的用户状态
+            const cachedUser = localStorage.getItem('cached_user');
+            if (cachedUser) {
+                try {
+                    state.currentUser = JSON.parse(cachedUser);
+                    this.updateUI(true);
+                    showToast('离线模式 - 显示缓存内容');
+                    // 触发回调加载缓存数据
+                    if (callbacks.onLogin) callbacks.onLogin();
+                    return;
+                } catch (e) {
+                    console.error('Failed to parse cached user:', e);
+                }
+            }
+            // 没有缓存，显示访客模式
+            this.updateUI(false);
+            showToast('离线模式 - 请连接网络');
+            // 触发回调来显示离线提示
+            if (callbacks.onLogout) callbacks.onLogout();
+            return;
+        }
+
         try {
             // 同时检查登录状态和注册状态
             const [statusResp, registerResp] = await Promise.all([
@@ -24,7 +53,24 @@ export const auth = {
                 fetch('/api/auth/can-register')
             ]);
 
-            if (!statusResp) return;
+            if (!statusResp) {
+                // 网络请求失败，尝试使用缓存
+                console.log('[Auth] Status check failed, trying cache');
+                const cachedUser = localStorage.getItem('cached_user');
+                if (cachedUser) {
+                    try {
+                        state.currentUser = JSON.parse(cachedUser);
+                        this.updateUI(true);
+                        if (callbacks.onLogin) callbacks.onLogin();
+                    } catch (e) {
+                        console.error('Failed to parse cached user:', e);
+                        if (callbacks.onLogout) callbacks.onLogout();
+                    }
+                } else {
+                    if (callbacks.onLogout) callbacks.onLogout();
+                }
+                return;
+            }
             const data = await statusResp.json();
 
             // 更新注册状态
@@ -35,13 +81,18 @@ export const auth = {
 
             if (data.is_authenticated) {
                 state.currentUser = data.user;
+                // 缓存用户状态供离线使用
+                localStorage.setItem('cached_user', JSON.stringify(data.user));
                 this.updateUI(true);
                 if (callbacks.onLogin) callbacks.onLogin();
             } else {
                 state.currentUser = null;
+                localStorage.removeItem('cached_user');
                 this.updateUI(false);
                 if (callbacks.onLogout) callbacks.onLogout();
             }
+
+            offlineMode = false;
         } catch (e) {
             console.error("Auth check failed", e);
         }
@@ -277,7 +328,7 @@ export function initAuthEvents(onLoginSuccess) {
                     const success = await auth.loginWithWebAuthn(onLoginSuccess);
                     // If logic inside loginWithWebAuthn handles success and closeModal, we are done.
                     // But we need to know if it was cancelled to show the modal.
-                    return; 
+                    return;
                 } catch (e) {
                     auth.openModal(true);
                 }

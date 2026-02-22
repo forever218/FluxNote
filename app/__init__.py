@@ -78,6 +78,18 @@ def create_app():
     def uploaded_file(filename):
         return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
+    # Service Worker Route - 需要特殊响应头以允许根作用域
+    @app.route('/static/sw.js')
+    def service_worker():
+        response = send_from_directory(
+            os.path.join(app.root_path, 'static'),
+            'sw.js',
+            mimetype='application/javascript'
+        )
+        # 允许 Service Worker 控制根路径
+        response.headers['Service-Worker-Allowed'] = '/'
+        return response
+
     # ===== Global Error Handlers =====
     # 防止在生产环境中泄露敏感错误信息
 

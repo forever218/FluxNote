@@ -24,16 +24,17 @@ def get_heatmap_data():
     if current_user.is_authenticated:
         # User's own notes + Public notes? Or just User's own?
         # Usually heatmap tracks "My Activity".
-        # But if we want to fill the void, maybe just user's notes is fine for logged in.
         # For anonymous, we show public notes activity.
         query = query.filter(
             Note.user_id == current_user.id,
+            Note.is_deleted == False,
             Note.created_at >= start_date
         )
     else:
         # Public activity
         query = query.filter(
             Note.is_public == True,
+            Note.is_deleted == False,
             Note.created_at >= start_date
         )
 

@@ -210,8 +210,9 @@ export const ui = {
             <div class="note-header">
                 <span>${formatDate(note.created_at)}</span>
                 ${note.is_public ? '<i class="fas fa-globe" title="公开"></i>' : '<i class="fas fa-lock" title="私密"></i>'}
+                ${note.is_offline_draft ? '<span class="offline-badge" title="待同步"><i class="fas fa-cloud-upload-alt"></i></span>' : ''}
             </div>
-            <div class="note-content markdown-body" style="${isOwner ? 'cursor: pointer;' : ''}" ${isOwner ? `ondblclick="window.dispatchEvent(new CustomEvent('note:edit', { detail: '${note.id}' }))"` : ''}>${content}</div>
+            <div class="note-content markdown-body" style="${isOwner ? 'cursor: pointer;' : ''}" ${isOwner && !note.is_offline_draft ? `ondblclick="window.dispatchEvent(new CustomEvent('note:edit', { detail: '${note.id}' }))"` : ''}>${content}</div>
 
             <div class="note-tags">
                 ${note.tags.map(t => `<span class="note-tag" data-tag="${escapeHtml(t)}">#${escapeHtml(t)}</span>`).join('')}
@@ -232,6 +233,12 @@ export const ui = {
 
             ${backlinksHtml}
         `;
+
+        if (note.is_offline_draft) {
+            card.classList.add('offline-card');
+            card.style.border = '2px dashed #f59e0b';
+            card.style.background = '#fffbeb';
+        }
 
         // Event delegation for tags inside the card
         card.querySelectorAll('.note-tag').forEach(tagEl => {
@@ -448,29 +455,19 @@ export const ui = {
                 saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 保存中';
                 const isPublic = document.getElementById(`edit-public-${id}`).checked;
 
-                const updateRes = await api.notes.update(id, {
-                    content: textarea.value,
-                    tags: state.editTags,
-                    is_public: isPublic
-                });
-
-                if (updateRes && updateRes.ok) {
-                    showToast('保存成功');
-                    // Update local state
-                    note.content = textarea.value;
-                    note.tags = state.editTags;
-                    note.is_public = isPublic;
-
-                    // Local Refresh
-                    this.restoreCard(note);
-
-                    // Trigger tags refresh event
-                    window.dispatchEvent(new CustomEvent('tags:refresh'));
-                } else {
-                    showToast('保存失败');
-                    saveBtn.disabled = false;
-                    saveBtn.textContent = '保存修改';
-                }
+                // Dispatch event to main.js for handling (offline support)
+                window.dispatchEvent(new CustomEvent('note:request-update', {
+                    detail: {
+                        id: id,
+                        content: textarea.value,
+                        tags: state.editTags,
+                        is_public: isPublic
+                    }
+                }));
+                
+                // Note: The UI restore/error handling is now done by main.js via ui.restoreCard
+                // If we need to handle specific failure to keep editor open, we'd need another event.
+                // For now, main.js will restore the card (closing editor) on success or fail.
             };
 
             btnsDiv.appendChild(cancelBtn);
