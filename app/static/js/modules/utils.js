@@ -178,3 +178,39 @@ export function getCaretCoordinates(element, position) {
     document.body.removeChild(div);
     return coords;
 }
+
+
+export async function renderMarkdownToContainer(rawContent, containerDOM, uiRef = null) {
+    let content = rawContent;
+    try {
+        if (typeof marked !== 'undefined') {
+            if (typeof parseWikiLinks !== 'undefined') {
+                content = parseWikiLinks(content);
+            }
+            let html = marked.parse(content);
+            if (typeof DOMPurify !== 'undefined') {
+                html = DOMPurify.sanitize(html);
+            }
+            containerDOM.innerHTML = html;
+
+            if (uiRef && uiRef.renderMermaid) {
+                await uiRef.renderMermaid(containerDOM);
+            }
+
+            if (typeof hljs !== 'undefined') {
+                containerDOM.querySelectorAll('pre code').forEach(block => {
+                    const isMermaid = block.classList.contains('language-mermaid') || 
+                                      block.classList.contains('language-mindmap');
+                    if (!isMermaid) {
+                        hljs.highlightElement(block);
+                    }
+                });
+            }
+        } else {
+            containerDOM.textContent = content.replace(/[#*\[\]]/g, '');
+        }
+    } catch (e) {
+        console.error('Markdown rendering failed:', e);
+        containerDOM.textContent = content;
+    }
+}

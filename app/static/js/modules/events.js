@@ -1,7 +1,7 @@
 import { api } from './api.js';
 import { state, setState } from './state.js';
 import { ui } from './ui.js';
-import { showToast, debounce, throttle, parseWikiLinks, escapeHtml, showConfirm, formatDate, formatExpiresAt } from './utils.js';
+import { showToast, debounce, throttle, parseWikiLinks, escapeHtml, showConfirm, formatDate, formatExpiresAt, renderMarkdownToContainer } from './utils.js';
 
 // 防止重复绑定的标志
 let eventsInitialized = false;
@@ -138,7 +138,7 @@ function initSharesModal() {
             window.addEventListener('click', outsideClick);
 
             try {
-                const response = await fetch('/api/shares');
+                const response = await api.share.list();
                 if (response.ok) {
                     allShares = await response.json();
                     renderSharesList(allShares);
@@ -227,7 +227,7 @@ function initSharesModal() {
         list.querySelectorAll('.edit-share-btn').forEach(btn => {
             btn.onclick = () => showEditShareModal(btn.dataset.id, btn.dataset.password === 'true', btn.dataset.expired === 'true', () => {
                  // Refresh list callback
-                 fetch('/api/shares').then(r => r.json()).then(data => {
+                 api.share.list().then(r => r.json()).then(data => {
                      allShares = data;
                      renderSharesList(allShares);
                  });
@@ -239,7 +239,7 @@ function initSharesModal() {
                 if(await showConfirm('确定要让此分享立即过期吗？', { title: '设为过期', type: 'danger' })) {
                     const res = await fetch(`/api/share/${btn.dataset.id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({expire_now: true})});
                     if(res.ok) {
-                        const data = await (await fetch('/api/shares')).json();
+                        const data = await (await api.share.list()).json();
                         allShares = data;
                         renderSharesList(allShares);
                         showToast('分享已过期');
@@ -953,44 +953,11 @@ function initCustomEvents(loadNotes, loadTags) {
                 list.querySelectorAll('.preview-v-btn').forEach(btn => {
                     btn.onclick = () => {
                         const v = JSON.parse(btn.dataset.json);
-                        let content = v.content;
-                        try {
-                            if (typeof marked !== 'undefined') {
-                                if (typeof parseWikiLinks !== 'undefined') {
-                                    content = parseWikiLinks(content);
-                                }
-                                let html = marked.parse(content);
-                                if (typeof DOMPurify !== 'undefined') {
-                                    html = DOMPurify.sanitize(html);
-                                }
-                                if (ui && ui.renderMermaid) {
-                                    const tempDiv = document.createElement('div');
-                                    tempDiv.innerHTML = html;
-                                    ui.renderMermaid(tempDiv);
-                                    html = tempDiv.innerHTML;
-                                }
-                                if (typeof hljs !== 'undefined') {
-                                    const tempDiv = document.createElement('div');
-                                    tempDiv.innerHTML = html;
-                                    tempDiv.querySelectorAll('pre code').forEach(block => {
-                                        const isMermaid = block.classList.contains('language-mermaid') ||
-                                                         block.classList.contains('language-mindmap');
-                                        if (!isMermaid) {
-                                            hljs.highlightElement(block);
-                                        }
-                                    });
-                                    html = tempDiv.innerHTML;
-                                }
-                                preview.innerHTML = `<div class="version-preview-header">预览版本: ${v.created_at}</div>` + html;
-                            } else {
-                                preview.innerHTML = `<div class="version-preview-header">预览版本: ${v.created_at}</div>` + content.replace(/[#*`[\]]/g, '');
-                            }
-                            preview.style.display = 'block';
-                        } catch(e) {
-                            console.error('预览渲染失败:', e);
-                            preview.innerHTML = `<div class="version-preview-header">预览版本: ${v.created_at}</div>` + content;
-                            preview.style.display = 'block';
-                        }
+                        preview.innerHTML = `<div class="version-preview-header">预览版本: ${v.created_at}</div>`;
+                        const contentDiv = document.createElement('div');
+                        preview.appendChild(contentDiv);
+                        renderMarkdownToContainer(v.content, contentDiv, ui);
+                        preview.style.display = 'block';
                     };
                 });
 
@@ -1042,40 +1009,8 @@ function initCustomEvents(loadNotes, loadTags) {
         modal.style.display = 'block';
 
         if (cardContent) {
-            let content = note.content;
-            try {
-                if (typeof marked !== 'undefined') {
-                    if (typeof parseWikiLinks !== 'undefined') {
-                        content = parseWikiLinks(content);
-                    }
-                    let html = marked.parse(content);
-                    if (typeof DOMPurify !== 'undefined') {
-                        html = DOMPurify.sanitize(html);
-                    }
-                    cardContent.innerHTML = html;
-                    cardContent.classList.add('markdown-body');
-
-                    if (ui && ui.renderMermaid) {
-                        await ui.renderMermaid(cardContent);
-                    }
-
-                    if (typeof hljs !== 'undefined') {
-                        cardContent.querySelectorAll('pre code').forEach(block => {
-                            const isMermaid = block.classList.contains('language-mermaid') ||
-                                             block.classList.contains('language-mindmap');
-                            if (!isMermaid) {
-                                hljs.highlightElement(block);
-                            }
-                        });
-                    }
-
-                } else {
-                    cardContent.textContent = content.replace(/[#*`\[\]]/g, '');
-                }
-            } catch (err) {
-                console.error(err);
-                cardContent.textContent = content;
-            }
+            cardContent.classList.add('markdown-body');
+            renderMarkdownToContainer(note.content, cardContent, ui);
         }
 
         if (cardDate) cardDate.textContent = new Date(note.created_at).toLocaleDateString('zh-CN');

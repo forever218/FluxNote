@@ -8,6 +8,16 @@ from app.utils.cache import invalidate_stats_cache
 from app.utils import allowed_file, extract_title_and_links
 from app.utils.error_handler import safe_error
 from werkzeug.utils import secure_filename
+
+def _sync_note_references(note_obj, link_titles):
+    # Sync note bidirectional links
+    from app.models import NoteReference
+    NoteReference.query.filter_by(source_id=note_obj.id).delete()
+    for title in link_titles:
+        target_note = Note.query.filter_by(title=title, user_id=note_obj.user_id, is_deleted=False).first()
+        if target_note and target_note.id != note_obj.id:
+            ref = NoteReference(source_id=note_obj.id, target_id=target_note.id)
+            db.session.add(ref)
 from datetime import datetime
 import os
 import json
@@ -209,7 +219,7 @@ def create_note():
         update_note_tags(new_note, tags)
         
         # Update Backlinks Relation (ID-based)
-        update_note_references(new_note, links)
+        _sync_note_references(new_note, links)
 
         db.session.add(new_note)
         db.session.commit()
@@ -284,7 +294,7 @@ def update_note(note_id):
         update_note_tags(note, tags)
         
         # Update Backlinks Relation (ID-based)
-        update_note_references(note, links)
+        _sync_note_references(note, links)
 
         db.session.commit()
         invalidate_stats_cache()
@@ -338,7 +348,7 @@ def restore_note_version(note_id, version_id):
         
         # Re-extract links
         title, links = extract_title_and_links(note.content)
-        update_note_references(note, links)
+        _sync_note_references(note, links)
         
         db.session.commit()
         invalidate_stats_cache()

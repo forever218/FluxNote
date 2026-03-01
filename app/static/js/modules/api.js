@@ -144,6 +144,7 @@ export const api = {
         })
     },
     share: {
+        list: () => fetchJson('/api/shares'),
         create: (data) => fetchJson('/api/share', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

@@ -50,7 +50,7 @@ export const auth = {
             // 同时检查登录状态和注册状态
             const [statusResp, registerResp] = await Promise.all([
                 api.auth.status(),
-                fetch('/api/auth/can-register')
+                fetch('/api/auth/can-register').catch(() => null)
             ]);
 
             if (!statusResp) {
@@ -94,7 +94,22 @@ export const auth = {
 
             offlineMode = false;
         } catch (e) {
-            console.error("Auth check failed", e);
+            console.error("Auth check failed (network/server error):", e);
+            // 处理后端服务器宕机或网络错误导致的 fetch 异常
+            const cachedUser = localStorage.getItem('cached_user');
+            if (cachedUser) {
+                try {
+                    state.currentUser = JSON.parse(cachedUser);
+                    this.updateUI(true);
+                    if (callbacks.onLogin) callbacks.onLogin();
+                } catch (err) {
+                    console.error('Failed to parse cached user:', err);
+                    if (callbacks.onLogout) callbacks.onLogout();
+                }
+            } else {
+                this.updateUI(false);
+                if (callbacks.onLogout) callbacks.onLogout();
+            }
         }
     },
 
