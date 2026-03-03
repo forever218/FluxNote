@@ -216,22 +216,24 @@ export const ui = {
             </div>
             <div class="note-content markdown-body" style="${isOwner ? 'cursor: pointer;' : ''}" ${isOwner && !note.is_offline_draft ? `ondblclick="window.dispatchEvent(new CustomEvent('note:edit', { detail: '${note.id}' }))"` : ''}>${content}</div>
 
-            <div class="note-tags">
-                ${note.tags.map(t => `<span class="note-tag" data-tag="${escapeHtml(t)}">#${escapeHtml(t)}</span>`).join('')}
-            </div>
+            <div class="note-footer">
+                <div class="note-tags">
+                    ${note.tags.map(t => `<span class="note-tag" data-tag="${escapeHtml(t)}">#${escapeHtml(t)}</span>`).join('')}
+                </div>
 
-            ${isOwner ? (state.isTrashMode ? `
-            <div class="note-actions">
-                <span class="note-action restore" data-action="restore" data-id="${note.id}" title="恢复"><i class="fas fa-undo"></i></span>
-                <span class="note-action delete-forever" data-action="permanent-delete" data-id="${note.id}" title="彻底删除" style="color:#ef4444;"><i class="fas fa-ban"></i></span>
+                ${isOwner ? (state.isTrashMode ? `
+                <div class="note-actions">
+                    <span class="note-action restore" data-action="restore" data-id="${note.id}" title="恢复"><i class="fas fa-undo"></i></span>
+                    <span class="note-action delete-forever" data-action="permanent-delete" data-id="${note.id}" title="彻底删除" style="color:#ef4444;"><i class="fas fa-ban"></i></span>
+                </div>
+                ` : `
+                <div class="note-actions">
+                    <span class="note-action share" data-action="share" data-id="${note.id}" title="分享"><i class="fas fa-share-alt"></i></span>
+                    <span class="note-action edit" data-action="edit" data-id="${note.id}" title="编辑"><i class="fas fa-edit"></i></span>
+                    <span class="note-action history" data-action="history" data-id="${note.id}" title="历史版本"><i class="fas fa-history"></i></span>
+                    <span class="note-action delete" data-action="delete" data-id="${note.id}" title="删除"><i class="fas fa-trash"></i></span>
+                </div>`) : ''}
             </div>
-            ` : `
-            <div class="note-actions">
-                <span class="note-action share" data-action="share" data-id="${note.id}" title="分享"><i class="fas fa-share-alt"></i></span>
-                <span class="note-action edit" data-action="edit" data-id="${note.id}" title="编辑"><i class="fas fa-edit"></i></span>
-                <span class="note-action history" data-action="history" data-id="${note.id}" title="历史版本"><i class="fas fa-history"></i></span>
-                <span class="note-action delete" data-action="delete" data-id="${note.id}" title="删除"><i class="fas fa-trash"></i></span>
-            </div>`) : ''}
 
             ${backlinksHtml}
         `;
@@ -463,6 +465,11 @@ export const ui = {
             contentDiv.innerHTML = '';
             contentDiv.appendChild(container);
 
+            // 初始化编辑器功能
+            editor.setupAutocomplete(textarea);
+            editor.setupSlashCommands(textarea);
+            editor.setupMarkdownShortcuts(textarea);
+            editor.setupAutoHeight(textarea);
             editor.setupAITools(textarea);
 
             textarea.focus();

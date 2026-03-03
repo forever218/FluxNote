@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, redirect, url_for, current_app, make_response, send_from_directory
-from flask_login import current_user
+from flask_login import current_user, login_required
 from app.extensions import db
 from app.models import Share, Config, User
 from app.utils.version import get_static_hash, get_static_manifest
@@ -59,6 +59,12 @@ def index():
     else:
         return redirect(url_for('blog.index'))
 
+
+@main_bp.route('/quick-note')
+@login_required
+def quick_note():
+    """闪念胶囊 - 极简记录页面"""
+    return render_template('quick_note.html')
 
 @main_bp.route('/login')
 def login_page():

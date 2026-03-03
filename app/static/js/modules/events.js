@@ -64,6 +64,112 @@ export function initGlobalEvents(context) {
         }
     });
 
+    // Knowledge Graph
+    document.getElementById('navGraph')?.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const modal = document.getElementById('graphModal');
+        if (modal) {
+            modal.style.display = 'block';
+            
+            const closeBtn = modal.querySelector('.close-graph');
+            if (closeBtn) closeBtn.onclick = () => modal.style.display = 'none';
+            
+            const outsideClick = (ev) => { if(ev.target === modal) modal.style.display = 'none'; };
+            window.addEventListener('click', outsideClick);
+
+            if (typeof echarts === 'undefined') {
+                showToast('正在加载图谱引擎，请稍候...');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/notes/graph');
+                if (!res.ok) throw new Error('获取数据失败');
+                const data = await res.json();
+                
+                const container = document.getElementById('graphContainer');
+                if (!container) return;
+                
+                // Initialize ECharts if not already
+                let chart = echarts.getInstanceByDom(container);
+                if (!chart) {
+                    chart = echarts.init(container);
+                }
+
+                const option = {
+                    tooltip: {
+                        formatter: '{b}'
+                    },
+                    series: [{
+                        type: 'graph',
+                        layout: 'force',
+                        data: data.nodes.map(n => ({
+                            id: n.id,
+                            name: n.name,
+                            symbolSize: Math.max(10, Math.min(50, n.value * 5)), // Limit size
+                            itemStyle: {
+                                color: '#10B981' // var(--primary)
+                            }
+                        })),
+                        edges: data.edges,
+                        roam: true,
+                        label: {
+                            show: true,
+                            position: 'right',
+                            formatter: '{b}',
+                            color: '#475569'
+                        },
+                        force: {
+                            repulsion: 200,
+                            edgeLength: 100
+                        },
+                        lineStyle: {
+                            color: '#cbd5e1',
+                            width: 2,
+                            curveness: 0.1
+                        },
+                        emphasis: {
+                            focus: 'adjacency',
+                            lineStyle: {
+                                width: 4
+                            }
+                        }
+                    }]
+                };
+
+                chart.setOption(option);
+                
+                // Handle window resize for the chart
+                window.addEventListener('resize', () => {
+                    chart.resize();
+                });
+                
+                // Clicking a node jumps to the note (if we implement a viewer, for now just log or jump)
+                chart.on('click', (params) => {
+                    if (params.dataType === 'node') {
+                        modal.style.display = 'none';
+                        showToast(`跳转到笔记: ${params.data.name}`);
+                        
+                        const searchInput = document.getElementById('searchInput');
+                        if (searchInput) {
+                            searchInput.value = params.data.name;
+                            // Trigger search
+                            searchInput.dispatchEvent(new Event('input'));
+                            // Ensure we are in the 'all' view
+                            if (state.isTrashMode) {
+                                switchView('all');
+                            }
+                        }
+                    }
+                });
+                
+            } catch (err) {
+                console.error(err);
+                showToast('加载图谱失败');
+            }
+        }
+    });
+
     // My Shares Modal logic
     initSharesModal();
 
@@ -111,6 +217,25 @@ export function initGlobalEvents(context) {
                 window.dispatchEvent(new CustomEvent('note:toggle-task', { 
                     detail: { id, index, checked: taskCheckbox.checked } 
                 }));
+            }
+        }
+
+        // Handle Wiki Link Clicks
+        const wikiLink = e.target.closest('.wiki-link');
+        if (wikiLink) {
+            e.preventDefault();
+            const title = wikiLink.dataset.wikiTitle;
+            if (title) {
+                const searchInput = document.getElementById('searchInput');
+                if (searchInput) {
+                    searchInput.value = title;
+                    // Trigger input event manually so that the debounce listener fires
+                    searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    // Ensure we are in the 'all' view
+                    if (state.isTrashMode) {
+                        switchView('all');
+                    }
+                }
             }
         }
     });

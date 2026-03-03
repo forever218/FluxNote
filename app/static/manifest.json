@@ -46,6 +46,19 @@
     ],
     "shortcuts": [
         {
+            "name": "闪念胶囊",
+            "short_name": "闪念胶囊",
+            "description": "快速记录灵感",
+            "url": "/quick-note",
+            "icons": [
+                {
+                    "src": "/static/img/icons/icon.svg",
+                    "sizes": "any",
+                    "type": "image/svg+xml"
+                }
+            ]
+        },
+        {
             "name": "写笔记",
             "short_name": "写笔记",
             "description": "创建新笔记",

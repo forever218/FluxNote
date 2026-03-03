@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>闪念胶囊 - 流光笔记</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#10B981">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/lib/fontawesome/css/all.min.css">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            background-color: var(--bg-color, #F8FAFC);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .quick-note-container {
+            width: 100%;
+            height: 100%;
+            max-width: 900px;
+            display: flex;
+            flex-direction: column;
+            background: var(--surface-color, #ffffff);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.08);
+        }
+        @media (min-width: 900px) {
+            .quick-note-container {
+                height: 85%;
+                border-radius: 20px;
+                overflow: hidden;
+            }
+        }
+        .header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color, #e2e8f0);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--surface-color, #ffffff);
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 18px;
+            color: var(--text-main, #1e293b);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .header .close-btn {
+            background: none;
+            border: none;
+            font-size: 20px;
+            color: var(--text-muted, #64748b);
+            cursor: pointer;
+            padding: 4px;
+        }
+        .editor-area {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            background: var(--surface-color, #ffffff);
+        }
+        textarea {
+            flex: 1;
+            width: 100%;
+            border: none;
+            resize: none;
+            font-size: 18px;
+            line-height: 1.6;
+            color: var(--text-main, #1e293b);
+            background: transparent;
+            outline: none;
+            font-family: inherit;
+        }
+        textarea::placeholder {
+            color: var(--text-muted, #94a3b8);
+        }
+        .footer {
+            padding: 16px 20px;
+            border-top: 1px solid var(--border-color, #e2e8f0);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--surface-color, #ffffff);
+        }
+        .tags-display {
+            font-size: 14px;
+            color: var(--primary, #10B981);
+            background: rgba(16, 185, 129, 0.1);
+            padding: 6px 12px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 500;
+        }
+        .submit-btn {
+            background-color: var(--primary, #10B981);
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+        .submit-btn:hover {
+            background-color: #059669;
+            transform: translateY(-1px);
+        }
+        .submit-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            display: none;
+            z-index: 1000;
+            font-size: 14px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+    </style>
+</head>
+<body>
+    <div class="quick-note-container">
+        <div class="header">
+            <h1><i class="fas fa-bolt" style="color: var(--primary);"></i> 闪念胶囊</h1>
+            <button class="close-btn" onclick="window.location.href='/'" title="返回首页"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="editor-area">
+            <textarea id="quickNoteContent" placeholder="记录瞬间的灵感..." autofocus></textarea>
+        </div>
+        <div class="footer">
+            <div class="tags-display"><i class="fas fa-hashtag"></i> 闪念</div>
+            <button id="submitBtn" class="submit-btn">
+                <i class="fas fa-paper-plane"></i> 保存
+            </button>
+        </div>
+    </div>
+    <div id="toast"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const textarea = document.getElementById('quickNoteContent');
+            const submitBtn = document.getElementById('submitBtn');
+            const toast = document.getElementById('toast');
+
+            function showToast(msg) {
+                toast.textContent = msg;
+                toast.style.display = 'block';
+                setTimeout(() => {
+                    toast.style.display = 'none';
+                }, 2000);
+            }
+
+            submitBtn.addEventListener('click', async () => {
+                const content = textarea.value.trim();
+                if (!content) {
+                    showToast('内容不能为空');
+                    return;
+                }
+
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 保存中...';
+
+                try {
+                    const response = await fetch('/api/notes', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            content: content,
+                            tags: ['闪念'],
+                            is_public: false
+                        })
+                    });
+
+                    if (response.ok) {
+                        showToast('记录成功！');
+                        textarea.value = '';
+                        setTimeout(() => {
+                            window.location.href = '/';
+                        }, 1000);
+                    } else {
+                        const data = await response.json();
+                        showToast(data.error || '保存失败');
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> 保存';
+                    }
+                } catch (e) {
+                    showToast('网络错误');
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> 保存';
+                }
+            });
+            
+            // Handle Cmd+Enter / Ctrl+Enter
+            textarea.addEventListener('keydown', (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                    submitBtn.click();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

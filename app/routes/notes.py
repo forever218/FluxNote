@@ -70,6 +70,35 @@ def update_note_references(note, links_list):
         ref = NoteReference(source_id=note.id, target_id=target.id)
         db.session.add(ref)
 
+@notes_bp.route('/notes/graph', methods=['GET'])
+@login_required
+def get_notes_graph():
+    """获取笔记关系图谱数据"""
+    try:
+        notes = Note.query.filter_by(user_id=current_user.id, is_deleted=False).all()
+        nodes = []
+        edges = []
+        note_dict = {note.id: note for note in notes}
+        
+        for note in notes:
+            nodes.append({
+                'id': note.id,
+                'name': note.title or '无标题笔记',
+                'value': max(1, len(note.content) // 100),
+                'category': 0
+            })
+            
+            for ref in note.outgoing_references:
+                if ref.target_id in note_dict:
+                    edges.append({
+                        'source': note.id,
+                        'target': ref.target_id
+                    })
+                    
+        return jsonify({'nodes': nodes, 'edges': edges})
+    except Exception as e:
+        return jsonify(safe_error(e, '获取图谱失败')), 500
+
 @notes_bp.route('/notes/review', methods=['GET'])
 @login_required
 def daily_review():
