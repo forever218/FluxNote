@@ -161,8 +161,10 @@ class Note(db.Model):
 
     @staticmethod
     def get_visible_filter():
-        """返回SQLAlchemy过滤条件：用于获取普通可见的笔记（排除未拆开的胶囊）"""
-        return db.or_(Note.is_capsule == False, Note.capsule_status == 'opened')
+        """返回SQLAlchemy过滤条件：用于获取普通可见的笔记（排除未拆开的胶囊）
+        注意：is_capsule 为 NULL 的旧数据视同普通笔记（非胶囊），需一并放行。
+        """
+        return db.or_(Note.is_capsule == None, Note.is_capsule == False, Note.capsule_status == 'opened')
 
     def is_viewable_by_owner(self):
         """判断当前胶囊是否对所有者可见真实内容"""
