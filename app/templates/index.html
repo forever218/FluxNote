@@ -127,14 +127,15 @@
                         <a href="#" class="nav-item" id="navDailyReview" onclick="return false;">
                             <i class="fas fa-history"></i> 每日回顾
                         </a>
-                        <a href="#" class="nav-item" id="navCapsules" onclick="return false;">
-                            <i class="fas fa-hourglass-start"></i> 时光胶囊
-                        </a>
                         <a href="#" class="nav-item" id="navShares" onclick="return false;">
                             <i class="fas fa-share-alt"></i> 我的分享
                         </a>
                         <a href="#" class="nav-item" id="navTrash" onclick="return false;">
                             <i class="fas fa-trash"></i> 回收站
+                        </a>
+                        <div class="nav-divider"></div>
+                        <a href="#" class="nav-item nav-item-subtle" id="navCapsules" onclick="return false;">
+                            <i class="far fa-hourglass"></i> 时光胶囊
                         </a>
                     </div>
                 </nav>
@@ -190,7 +191,7 @@
                         <input type="text" id="tagInput" class="tag-input-inline" placeholder="输入标签按回车..." style="display:none;">
                         <button class="tool-btn" title="上传图片"><i class="far fa-image"></i></button>
                         <!-- AI 按钮由 JS 插入 -->
-                        <div class="input-controls" style="display:inline-block;"></div>
+                        <div class="input-controls"></div>
                     </div>
                     <div class="editor-actions">
                          <div class="public-switch">
@@ -468,7 +469,7 @@
     <div id="capsuleModal" class="modal">
         <div class="modal-content" style="max-width: 800px;">
             <div class="modal-header">
-                <h2><i class="fas fa-hourglass-start" style="margin-right: 10px; color: #f39c12;"></i> 时光胶囊陈列室</h2>
+                <h2><i class="far fa-hourglass" style="margin-right: 10px; color: var(--slate-400);"></i> 时光胶囊</h2>
                 <span class="close-capsule">&times;</span>
             </div>
             <div class="modal-body">

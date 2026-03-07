@@ -823,6 +823,7 @@ function initEditorLogic(loadNotes) {
                 const capsuleBtn = textarea.closest('.memo-editor')?.querySelector('.capsule-trigger');
                 if (capsuleBtn) {
                     capsuleBtn.innerHTML = '<i class="far fa-hourglass"></i>';
+                    capsuleBtn.classList.remove('active');
                     capsuleBtn.style.color = '';
                 }
 
@@ -830,7 +831,7 @@ function initEditorLogic(loadNotes) {
                 setState('currentTags', []);
                 ui.renderTags('input');
                 loadNotes(true);
-                showToast(isCapsule ? '已封存时光胶囊' : '已记录');
+                showToast(isCapsule ? '已封存' : '已记录');
             } else if (res === null) {
                 // Backend unreachable, fallback to offline logic
                 const draftId = Date.now();
@@ -1535,22 +1536,21 @@ function renderCapsules(capsules, loadNotes, closeCapsuleModal) {
         let actionBtn = '';
 
         if (isLocked) {
-            statusHtml = `<span class="capsule-badge locked"><i class="fas fa-lock"></i> 锁定中</span>`;
-            cardStyle = 'filter: grayscale(0.5); opacity: 0.8;';
+            statusHtml = `<span class="capsule-badge locked"><i class="far fa-clock"></i> 封存中</span>`;
+            cardStyle = 'opacity: 0.75;';
             if (c.capsule_date) {
                 const remaining = new Date(c.capsule_date) - new Date();
                 const days = Math.floor(remaining / (1000 * 60 * 60 * 24));
-                const hours = Math.floor((remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                actionBtn = `<div class="capsule-timer">还有 ${days} 天 ${hours} 小时解锁</div>`;
+                actionBtn = `<div class="capsule-timer">${days > 0 ? `还有 ${days} 天解锁` : '即将解锁'}</div>`;
             } else {
-                actionBtn = `<div class="capsule-timer">解锁日期未设置</div>`;
+                actionBtn = `<div class="capsule-timer">未设解锁日期</div>`;
             }
         } else if (isReady) {
-            statusHtml = `<span class="capsule-badge ready"><i class="fas fa-unlock"></i> 可开启</span>`;
-            cardStyle = 'border: 2px solid #f39c12; box-shadow: 0 0 15px rgba(243, 156, 18, 0.3);';
-            actionBtn = `<button class="btn btn-primary open-capsule-btn" data-id="${c.id}" style="width:100%; margin-top:10px; background:#f39c12; border:none;">拆开信封</button>`;
+            statusHtml = `<span class="capsule-badge ready"><i class="far fa-envelope"></i> 可查看</span>`;
+            cardStyle = '';
+            actionBtn = `<button class="btn btn-secondary open-capsule-btn" data-id="${c.id}" style="width:100%; margin-top:10px;">打开</button>`;
         } else {
-            statusHtml = `<span class="capsule-badge opened"><i class="fas fa-envelope-open"></i> 已拆开</span>`;
+            statusHtml = `<span class="capsule-badge opened"><i class="far fa-envelope-open"></i> 已查看</span>`;
             actionBtn = `<button class="btn btn-secondary view-capsule-btn" data-id="${c.id}" style="width:100%; margin-top:10px;">查看内容</button>`;
         }
 

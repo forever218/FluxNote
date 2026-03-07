@@ -394,6 +394,36 @@ button { font-family: inherit; cursor: pointer; }
 .nav-item.active { background: var(--primary-light); color: var(--primary); font-weight: 600; }
 .nav-item.active i { color: var(--primary); }
 
+/* 时光胶囊到期指示点（低调，不抢主视线） */
+.capsule-ready-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    background: var(--slate-400);
+    border-radius: 50%;
+    margin-left: 6px;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+/* 次级导航入口（较低权重，视觉上从属于主导航） */
+.nav-divider {
+    height: 1px;
+    background: var(--slate-100);
+    margin: 6px 4px;
+}
+.nav-item-subtle {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--slate-400);
+    padding: 7px 16px;
+}
+.nav-item-subtle i { font-size: 13px; color: var(--slate-300); }
+.nav-item-subtle:hover { color: var(--slate-600); background: var(--slate-50); }
+.nav-item-subtle:hover i { color: var(--slate-400); }
+.nav-item-subtle.active { background: transparent; color: var(--slate-600); font-weight: 500; }
+.nav-item-subtle.active i { color: var(--slate-400); }
+
 /* 登录按钮 */
 .sidebar-footer {
     margin-top: auto;
@@ -593,6 +623,22 @@ button { font-family: inherit; cursor: pointer; }
 }
 
 .editor-actions { display: flex; align-items: center; gap: 15px; }
+
+/* 胶囊图标按钮 —— 放在 editor-actions 右侧区，风格与 public-switch globe 一致 */
+.capsule-action-icon {
+    background: none;
+    border: none;
+    color: var(--slate-300);
+    font-size: 14px;
+    padding: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    transition: color 0.2s;
+    line-height: 1;
+}
+.capsule-action-icon:hover { color: var(--slate-500); }
+.capsule-action-icon.active { color: var(--slate-500); }
 
 /* 公开开关 */
 .public-switch {
@@ -2015,59 +2061,57 @@ input:checked + .slider:before { transform: translateX(20px); }
 
 .capsule-card {
     background: white;
-    border-radius: 16px;
-    padding: 24px;
+    border-radius: 12px;
+    padding: 20px;
     border: 1px solid var(--slate-200);
-    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
     display: flex;
     flex-direction: column;
     height: 100%;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: box-shadow 0.2s, border-color 0.2s;
     position: relative;
     overflow: hidden;
 }
 
 .capsule-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 12px 25px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.07);
+    border-color: var(--slate-300);
 }
 
 .capsule-card-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 20px;
+    margin-bottom: 16px;
 }
 
 .capsule-badge {
-    padding: 4px 10px;
-    border-radius: 20px;
+    padding: 3px 8px;
+    border-radius: 6px;
     font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    font-weight: 500;
+    letter-spacing: 0.2px;
 }
 
 .capsule-badge.locked {
     background: var(--slate-100);
-    color: var(--slate-500);
+    color: var(--slate-400);
 }
 
 .capsule-badge.ready {
-    background: #fef3c7;
-    color: #d97706;
-    animation: capsule-pulse 2s infinite;
+    background: var(--slate-100);
+    color: var(--slate-600);
 }
 
 .capsule-badge.opened {
-    background: var(--primary-light);
-    color: var(--primary);
+    background: var(--slate-50);
+    color: var(--slate-400);
 }
 
 .capsule-date {
-    font-size: 12px;
-    color: var(--slate-400);
-    font-weight: 500;
+    font-size: 11px;
+    color: var(--slate-300);
+    font-weight: 400;
 }
 
 .capsule-card-body {
@@ -2077,67 +2121,54 @@ input:checked + .slider:before { transform: translateX(20px); }
     justify-content: center;
     align-items: center;
     text-align: center;
-    padding: 10px 0;
+    padding: 8px 0;
 }
 
 .capsule-hint {
-    font-size: 16px;
-    color: var(--slate-700);
+    font-size: 14px;
+    color: var(--slate-600);
     font-style: italic;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
     line-height: 1.5;
-    font-weight: 500;
+    font-weight: 400;
 }
 
 .capsule-title {
-    font-size: 14px;
-    color: var(--slate-900);
-    font-weight: 600;
+    font-size: 13px;
+    color: var(--slate-700);
+    font-weight: 500;
     margin-top: 8px;
 }
 
 .capsule-locked-placeholder {
-    font-size: 13px;
+    font-size: 12px;
     color: var(--slate-300);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
 }
 
 .capsule-timer {
-    font-size: 12px;
-    color: var(--slate-500);
-    background: var(--slate-50);
-    padding: 6px 12px;
-    border-radius: 8px;
+    font-size: 11px;
+    color: var(--slate-400);
+    background: transparent;
+    padding: 4px 0;
     display: inline-block;
-    margin-top: 15px;
-}
-
-/* 磨砂玻璃层 */
-.capsule-card[style*="filter: grayscale"]::after {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(2px);
-    pointer-events: none;
-    z-index: 1;
+    margin-top: 10px;
 }
 
 .capsule-card-footer {
     margin-top: auto;
-    padding-top: 16px;
+    padding-top: 14px;
 }
 
 .open-capsule-btn {
-    transition: all 0.3s;
-    font-weight: 600;
+    transition: all 0.2s;
+    font-weight: 500;
 }
 
 .open-capsule-btn:hover {
-    transform: scale(1.02);
-    box-shadow: 0 5px 15px rgba(243, 156, 18, 0.4);
+    opacity: 0.85;
 }
 
 @keyframes capsule-pulse {
@@ -2146,13 +2177,25 @@ input:checked + .slider:before { transform: translateX(20px); }
     100% { transform: scale(1); opacity: 1; }
 }
 
-/* 编辑器中的胶囊按钮激活状态 */
+/* 内联编辑器胶囊按钮（次级工具样式） */
+.tool-btn-subtle {
+    color: var(--slate-300);
+    background: transparent;
+    border-color: transparent;
+    font-size: 13px;
+}
+.tool-btn-subtle:hover {
+    color: var(--slate-500);
+    background: var(--slate-50);
+    border-color: transparent;
+    box-shadow: none;
+}
 .capsule-trigger.active {
-    color: #f39c12 !important;
+    color: var(--slate-500) !important;
 }
 
 .capsule-menu {
-    border-top: 3px solid #f39c12 !important;
+    border-top: 2px solid var(--slate-200) !important;
 }
 
 .share-edit-section input:focus,

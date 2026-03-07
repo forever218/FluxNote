@@ -217,18 +217,12 @@ async function checkAndNotifyCapsules() {
             const capsules = await res.json();
             const readyOnes = capsules.filter(c => c.capsule_status === 'ready');
             if (readyOnes.length > 0) {
-                const count = readyOnes.length;
-                setTimeout(() => {
-                    showToast(`⌛ 你有 ${count} 个时光胶囊已到期，快去陈列室拆开吧！`, 8000);
-                    const navCaps = document.getElementById('navCapsules');
-                    if (navCaps && !navCaps.querySelector('.capsule-ready-badge')) {
-                        const badge = document.createElement('span');
-                        badge.className = 'capsule-ready-badge';
-                        badge.style.cssText = 'background:#f39c12;color:white;border-radius:10px;padding:0 6px;font-size:10px;margin-left:4px;vertical-align:middle;';
-                        badge.textContent = count;
-                        navCaps.appendChild(badge);
-                    }
-                }, 1500);
+                const navCaps = document.getElementById('navCapsules');
+                if (navCaps && !navCaps.querySelector('.capsule-ready-dot')) {
+                    const dot = document.createElement('span');
+                    dot.className = 'capsule-ready-dot';
+                    navCaps.appendChild(dot);
+                }
             }
         }
     } catch (e) {

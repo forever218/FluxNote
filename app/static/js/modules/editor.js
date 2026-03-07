@@ -457,24 +457,33 @@ export const editor = {
     },
 
     setupCapsuleTool(textarea) {
-        let controls = null;
         const memoEditor = textarea.closest('.memo-editor');
         if (memoEditor) {
-            controls = memoEditor.querySelector('.editor-footer .input-controls');
-        }
-        if (!controls) {
-            const inlineContainer = textarea.closest('.inline-editor-container');
-            if (inlineContainer) {
-                controls = inlineContainer.querySelector('.inline-tools-left');
+            // 主编辑器：把胶囊按钮放入右侧 editor-actions（发布选项区），而非工具区
+            const actions = memoEditor.querySelector('.editor-footer .editor-actions');
+            if (actions && !actions.querySelector('.capsule-trigger')) {
+                const capsuleBtn = document.createElement('button');
+                capsuleBtn.type = 'button';
+                capsuleBtn.className = 'capsule-trigger capsule-action-icon';
+                capsuleBtn.innerHTML = '<i class="far fa-hourglass"></i>';
+                capsuleBtn.title = '封存为时光胶囊';
+                capsuleBtn.onclick = (e) => this.showCapsuleMenu(e, textarea);
+                // 插入到公开开关之前
+                const pubSwitch = actions.querySelector('.public-switch');
+                actions.insertBefore(capsuleBtn, pubSwitch || actions.firstChild);
             }
+            return;
         }
-        if (!controls) return;
-        if (controls.querySelector('.capsule-trigger')) return;
-
+        // 内联编辑器：放入左侧工具区
+        const inlineContainer = textarea.closest('.inline-editor-container');
+        if (!inlineContainer) return;
+        const controls = inlineContainer.querySelector('.inline-tools-left');
+        if (!controls || controls.querySelector('.capsule-trigger')) return;
         const capsuleBtn = document.createElement('button');
-        capsuleBtn.className = 'tool-btn capsule-trigger';
+        capsuleBtn.type = 'button';
+        capsuleBtn.className = 'tool-btn capsule-trigger tool-btn-subtle';
         capsuleBtn.innerHTML = '<i class="far fa-hourglass"></i>';
-        capsuleBtn.title = '设为时光胶囊';
+        capsuleBtn.title = '封存为时光胶囊';
         capsuleBtn.onclick = (e) => this.showCapsuleMenu(e, textarea);
         controls.appendChild(capsuleBtn);
     },
@@ -503,20 +512,20 @@ export const editor = {
 
         const inputStyle = 'width:100%; font-size:13px; padding:7px 10px; border:1px solid var(--slate-200); border-radius:6px; outline:none; transition:border 0.2s; box-sizing:border-box;';
         menu.innerHTML = `
-            <div style="margin-bottom: 12px; font-weight: bold; font-size: 14px; display: flex; align-items: center; gap: 8px;">
-                <i class="fas fa-hourglass-start" style="color: #f39c12;"></i> 时光胶囊设置
+            <div style="margin-bottom: 12px; font-size: 13px; font-weight: 500; color: var(--slate-600); display: flex; align-items: center; gap: 7px;">
+                <i class="far fa-hourglass" style="color: var(--slate-400);"></i> 封存为时光胶囊
             </div>
             <div style="margin-bottom: 10px;">
-                <label style="display: block; font-size: 12px; margin-bottom: 4px; color: #666;">解锁日期</label>
+                <label style="display: block; font-size: 12px; margin-bottom: 4px; color: #888;">解锁日期</label>
                 <input type="datetime-local" id="capsule-date-input" style="${inputStyle}" value="${capsuleDate}">
             </div>
             <div style="margin-bottom: 15px;">
-                <label style="display: block; font-size: 12px; margin-bottom: 4px; color: #666;">外部寄语 (Hint)</label>
+                <label style="display: block; font-size: 12px; margin-bottom: 4px; color: #888;">寄语（可选）</label>
                 <input type="text" id="capsule-hint-input" style="${inputStyle}" placeholder="写给未来的自己..." value="${capsuleHint}">
             </div>
             <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                <button class="btn btn-secondary" id="capsule-cancel" style="padding: 4px 12px; font-size: 12px;">取消封存</button>
-                <button class="btn btn-primary" id="capsule-save" style="padding: 4px 12px; font-size: 12px;">确认封存</button>
+                <button class="btn btn-secondary" id="capsule-cancel" style="padding: 4px 12px; font-size: 12px;">取消</button>
+                <button class="btn btn-primary" id="capsule-save" style="padding: 4px 12px; font-size: 12px;">封存</button>
             </div>
         `;
 
@@ -548,10 +557,11 @@ export const editor = {
             textarea.dataset.capsuleHint = hint;
             
             button.innerHTML = '<i class="fas fa-hourglass-half"></i>';
-            button.style.color = '#f39c12';
-            button.title = '已设为时光胶囊';
+            button.classList.add('active');
+            button.style.color = '';
+            button.title = '时光胶囊已设置';
             
-            showToast('已设为时光胶囊，发布后将封存');
+            showToast('将在发布后封存');
             menu.remove();
         };
 
@@ -561,10 +571,11 @@ export const editor = {
             delete textarea.dataset.capsuleHint;
             
             button.innerHTML = '<i class="far fa-hourglass"></i>';
+            button.classList.remove('active');
             button.style.color = '';
-            button.title = '设为时光胶囊';
+            button.title = '封存为时光胶囊';
             
-            showToast('时光胶囊已取消');
+            showToast('已取消封存');
             menu.remove();
         };
 
