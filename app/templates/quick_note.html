@@ -6,6 +6,12 @@
     <title>闪念胶囊 - 流光笔记</title>
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#10B981">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="流光笔记">
+    <link rel="apple-touch-icon" href="/static/img/icons/apple-touch-icon.png">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="流光笔记">
     <link rel="stylesheet" href="/static/css/style.css">
     <link rel="stylesheet" href="/static/lib/fontawesome/css/all.min.css">
     <style>
@@ -163,30 +169,46 @@
             const submitBtn = document.getElementById('submitBtn');
             const toast = document.getElementById('toast');
 
-            function showToast(msg) {
+            function showToast(msg, duration = 2000) {
                 toast.textContent = msg;
                 toast.style.display = 'block';
-                setTimeout(() => {
-                    toast.style.display = 'none';
-                }, 2000);
+                setTimeout(() => { toast.style.display = 'none'; }, duration);
+            }
+
+            function saveOfflineDraft(content) {
+                const draftId = Date.now();
+                const draft = {
+                    _id: draftId,
+                    content: content,
+                    tags: ['闪念'],
+                    is_public: false,
+                    created_at: new Date().toISOString()
+                };
+                const drafts = JSON.parse(localStorage.getItem('offline_drafts') || '[]');
+                drafts.push(draft);
+                localStorage.setItem('offline_drafts', JSON.stringify(drafts));
             }
 
             submitBtn.addEventListener('click', async () => {
                 const content = textarea.value.trim();
-                if (!content) {
-                    showToast('内容不能为空');
-                    return;
-                }
+                if (!content) return showToast('内容不能为空');
 
                 submitBtn.disabled = true;
                 submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 保存中...';
 
+                if (!navigator.onLine) {
+                    saveOfflineDraft(content);
+                    showToast('已保存到离线草稿，联网后自动同步');
+                    textarea.value = '';
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> 保存';
+                    return;
+                }
+
                 try {
                     const response = await fetch('/api/notes', {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             content: content,
                             tags: ['闪念'],
@@ -197,9 +219,13 @@
                     if (response.ok) {
                         showToast('记录成功！');
                         textarea.value = '';
-                        setTimeout(() => {
-                            window.location.href = '/';
-                        }, 1000);
+                        setTimeout(() => { window.location.href = '/'; }, 1000);
+                    } else if (response.status === 401) {
+                        saveOfflineDraft(content);
+                        showToast('会话已失效，已保存为离线草稿，请重新登录后同步', 3000);
+                        textarea.value = '';
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> 保存';
                     } else {
                         const data = await response.json();
                         showToast(data.error || '保存失败');
@@ -207,13 +233,14 @@
                         submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> 保存';
                     }
                 } catch (e) {
-                    showToast('网络错误');
+                    saveOfflineDraft(content);
+                    showToast('网络不可用，已保存为离线草稿', 3000);
+                    textarea.value = '';
                     submitBtn.disabled = false;
                     submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> 保存';
                 }
             });
             
-            // Handle Cmd+Enter / Ctrl+Enter
             textarea.addEventListener('keydown', (e) => {
                 if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                     submitBtn.click();

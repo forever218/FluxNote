@@ -5,51 +5,92 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>离线 - 流光笔记</title>
     <style>
+        :root {
+            --bg: #f8fafc;
+            --text: #334155;
+            --text-sub: #64748b;
+            --primary: #10B981;
+            --primary-hover: #059669;
+            --card-bg: #ffffff;
+            --card-border: #e2e8f0;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #0f172a;
+                --text: #e2e8f0;
+                --text-sub: #94a3b8;
+                --primary: #34d399;
+                --primary-hover: #10B981;
+                --card-bg: #1e293b;
+                --card-border: #334155;
+            }
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #f8fafc;
-            color: #334155;
+            min-height: 100vh;
+            background-color: var(--bg);
+            color: var(--text);
             text-align: center;
+            padding: 24px;
+        }
+        .offline-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 40px 32px;
+            max-width: 400px;
+            width: 100%;
+            box-shadow: 0 4px 24px rgba(0,0,0,.06);
         }
         .icon {
-            font-size: 4rem;
-            color: #94a3b8;
-            margin-bottom: 1rem;
+            font-size: 3.5rem;
+            margin-bottom: 16px;
+            line-height: 1;
         }
         h1 {
-            font-size: 1.5rem;
-            margin-bottom: 0.5rem;
+            font-size: 1.4rem;
+            margin-bottom: 8px;
             font-weight: 600;
         }
         p {
-            color: #64748b;
-            margin-bottom: 2rem;
+            color: var(--text-sub);
+            margin-bottom: 24px;
+            font-size: 0.95rem;
+            line-height: 1.5;
         }
         button {
-            background-color: #10B981;
+            background-color: var(--primary);
             color: white;
             border: none;
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.5rem;
-            font-size: 1rem;
+            padding: 12px 28px;
+            border-radius: 8px;
+            font-size: 0.95rem;
             cursor: pointer;
             transition: background-color 0.2s;
+            font-weight: 500;
         }
-        button:hover {
-            background-color: #059669;
+        button:hover { background-color: var(--primary-hover); }
+        button:active { transform: scale(0.98); }
+        .hint {
+            margin-top: 20px;
+            font-size: 0.8rem;
+            color: var(--text-sub);
+            opacity: 0.7;
         }
     </style>
 </head>
 <body>
-    <div class="icon">📡</div>
-    <h1>当前处于离线状态</h1>
-    <p>请检查您的网络连接，然后重试。</p>
-    <button onclick="window.location.reload()">重试连接</button>
+    <div class="offline-card">
+        <div class="icon">📡</div>
+        <h1>当前处于离线状态</h1>
+        <p>网络连接似乎已断开，请检查网络设置后重试。</p>
+        <button onclick="window.location.reload()">重试连接</button>
+        <div class="hint">已缓存的笔记仍可在主页查看</div>
+    </div>
 </body>
 </html>

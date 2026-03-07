@@ -14,6 +14,8 @@ const LIBS_CACHE = 'fluxnote-libs-v1';
 const IMAGE_CACHE = 'fluxnote-images-v1';
 const DYNAMIC_CACHE = `fluxnote-dynamic-${CACHE_VERSION}`;
 
+const OFFLINE_FALLBACK = '/static/offline.html';
+
 // 第三方库和字体 (由于忽略了哈希计算，采用固定版本或原始路径)
 const EXTERNAL_LIBS = [
     '/static/lib/fontawesome/css/all.min.css',
@@ -46,25 +48,31 @@ self.addEventListener('install', (event) => {
         const staticCache = await caches.open(STATIC_CACHE);
         const libsCache = await caches.open(LIBS_CACHE);
         
+        // 0. 预缓存离线回退页面（确保离线时一定可用）
+        try {
+            const offlineResponse = await fetch(OFFLINE_FALLBACK);
+            if (offlineResponse.ok) {
+                await staticCache.put(OFFLINE_FALLBACK, offlineResponse);
+            }
+        } catch (e) {
+            console.warn('[SW] Failed to precache offline fallback:', e);
+        }
+
         // 1. 处理带哈希的业务代码 (增量检查并更新到 STATIC_CACHE)
         const manifestEntries = Object.entries(ASSET_MANIFEST);
         const manifestPromises = manifestEntries.map(async ([url, hash]) => {
             try {
-                // 检查现有缓存
                 const cachedResponse = await staticCache.match(url);
                 if (cachedResponse) {
-                    // 如果缓存中已存在且哈希一致，跳过下载
                     const cachedHash = cachedResponse.headers.get('X-Asset-Hash');
                     if (cachedHash === hash) {
                         return;
                     }
                 }
 
-                // 技巧：我们通过在请求 URL 上附加版本号来利用浏览器 HTTP 缓存
                 const versionedUrl = `${url}?v=${hash}`;
                 const response = await fetch(versionedUrl);
                 if (response.ok) {
-                    // 创建新响应头，存入该文件的独立哈希以便下次对比
                     const headers = new Headers(response.headers);
                     headers.set('X-Asset-Hash', hash);
                     const newResponse = new Response(response.body, {
@@ -98,18 +106,18 @@ self.addEventListener('install', (event) => {
  */
 async function cacheFirst(request, cacheName) {
     const cache = await caches.open(cacheName);
-    // 关键修复：忽略搜索参数匹配
     const cached = await cache.match(request, { ignoreSearch: true });
     if (cached) return cached;
 
     try {
         const response = await fetch(request);
         if (response.ok) {
-            // 如果是图片，限制该桶的存储条数，防止无限膨胀
-            if (cacheName === IMAGE_CACHE) {
-                limitCacheSize(cacheName, 100);
-            }
-            cache.put(request, response.clone());
+            const cloned = response.clone();
+            cache.put(request, cloned).then(() => {
+                if (cacheName === IMAGE_CACHE) {
+                    limitCacheSize(cacheName, 100);
+                }
+            });
         }
         return response;
     } catch (e) {
@@ -118,14 +126,14 @@ async function cacheFirst(request, cacheName) {
 }
 
 /**
- * 简单的缓存条数限制逻辑
+ * 缓存条数限制：先写入再清理，确保不超限
  */
 async function limitCacheSize(cacheName, maxItems) {
     const cache = await caches.open(cacheName);
     const keys = await cache.keys();
     if (keys.length > maxItems) {
-        // 删除最旧的一条
-        await cache.delete(keys[0]);
+        const overflow = keys.length - maxItems;
+        await Promise.all(keys.slice(0, overflow).map(key => cache.delete(key)));
     }
 }
 
@@ -156,13 +164,14 @@ async function networkFirst(request, cacheName) {
 
 /**
  * 策略：Network First with Timeout (HTML 导航专用)
+ * 支持 Navigation Preload 以减少 SW 启动延迟
  */
-async function networkFirstWithTimeout(request, timeoutMs, fallbackUrl) {
+async function networkFirstWithTimeout(request, timeoutMs, fallbackUrl, preloadResponse) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-        const response = await fetch(request, { signal: controller.signal });
+        const response = (await preloadResponse) || await fetch(request, { signal: controller.signal });
         clearTimeout(timeoutId);
         if (response.ok) {
             const cache = await caches.open(DYNAMIC_CACHE);
@@ -170,7 +179,7 @@ async function networkFirstWithTimeout(request, timeoutMs, fallbackUrl) {
         }
         return response;
     } catch (error) {
-        console.log('[SW] Navigation fetch failed, falling back to cache');
+        clearTimeout(timeoutId);
     }
 
     const cached = await caches.match(request);
@@ -182,29 +191,31 @@ async function networkFirstWithTimeout(request, timeoutMs, fallbackUrl) {
         }
     }
 
-    return caches.match(fallbackUrl) || new Response(
+    const offlinePage = await caches.match(fallbackUrl);
+    return offlinePage || new Response(
         '<html><body><div style="padding: 20px; font-family: sans-serif;"><h1>离线模式</h1><p>网络连接已断开。</p></div></body></html>',
         { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
     );
 }
 
 /**
- * 激活事件：清理旧缓存并接管页面
+ * 激活事件：清理旧缓存、启用 Navigation Preload 并接管页面
  */
 self.addEventListener('activate', (event) => {
     event.waitUntil((async () => {
+        // 启用 Navigation Preload（减少 network-first 导航的 SW 启动延迟）
+        if (self.registration.navigationPreload) {
+            await self.registration.navigationPreload.enable();
+        }
+
         const cacheNames = await caches.keys();
         const VALID_CACHES = [STATIC_CACHE, LIBS_CACHE, IMAGE_CACHE, DYNAMIC_CACHE];
         
         await Promise.all(
             cacheNames
-                .filter(name => {
-                    // 仅清理 fluxnote 相关但不在当前白名单内的缓存
-                    return name.startsWith('fluxnote-') && !VALID_CACHES.includes(name);
-                })
+                .filter(name => name.startsWith('fluxnote-') && !VALID_CACHES.includes(name))
                 .map(name => caches.delete(name))
         );
-        // 立即接管所有客户端
         await self.clients.claim();
         console.log(`[SW] ${CACHE_VERSION} Activated & Claimed`);
     })());
@@ -220,9 +231,10 @@ self.addEventListener('fetch', (event) => {
     // 仅处理 GET 请求，且非排除路径，且同域
     if (request.method !== 'GET' || !url.protocol.startsWith('http') || isExcluded(request.url)) return;
 
-    // 1. 导航请求 (HTML)
+    // 1. 导航请求 (HTML) — 利用 Navigation Preload
     if (request.mode === 'navigate' || request.headers.get('accept')?.includes('text/html')) {
-        event.respondWith(networkFirstWithTimeout(request, 3000, '/static/offline.html'));
+        const preloadResponse = event.preloadResponse;
+        event.respondWith(networkFirstWithTimeout(request, 3000, OFFLINE_FALLBACK, preloadResponse));
         return;
     }
 

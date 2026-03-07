@@ -1,4 +1,4 @@
-from flask import Flask, send_from_directory, jsonify, render_template
+from flask import Flask, send_from_directory, jsonify, render_template, request, redirect, url_for
 from .extensions import db, login_manager, cors, migrate, compress
 from .models import User, Config
 from .routes.auth import auth_bp
@@ -65,6 +65,13 @@ def create_app():
     @login_manager.user_loader
     def load_user(user_id):
         return db.session.get(User, user_id)
+
+    @login_manager.unauthorized_handler
+    def unauthorized():
+        # API 统一返回 401 JSON，便于前端稳定区分“会话失效”和“网络失败”。
+        if request.path.startswith('/api/'):
+            return jsonify({'code': 401, 'error': '未登录或会话已失效'}), 401
+        return redirect(url_for('main.login_page', next=request.url))
 
     # Register Blueprints
     app.register_blueprint(auth_bp, url_prefix='/api/auth')

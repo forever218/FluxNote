@@ -20,7 +20,7 @@ window.addEventListener('offline', () => {
     showToast('当前处于离线模式');
 });
 
-export async function fetchJson(url, options = {}) {
+export async function fetchJson(url, options = {}, meta = {}) {
     try {
         const response = await fetch(url, options);
 
@@ -34,6 +34,11 @@ export async function fetchJson(url, options = {}) {
         if (response.status === 408) {
             console.log('[API] Offline response for:', url);
             return null;
+        }
+
+        // 登录失败等认证流程内的 401 不应被当作“现有会话失效”。
+        if (response.status === 401 && meta.suppressUnauthorizedEvent) {
+            return response;
         }
 
         if (response.status === 401) {
@@ -68,13 +73,13 @@ export const api = {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password })
-        }),
+        }, { suppressUnauthorizedEvent: true }),
         register: (username, password) => fetchJson('/api/auth/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password })
-        }),
-        logout: () => fetchJson('/api/auth/logout', { method: 'POST' }),
+        }, { suppressUnauthorizedEvent: true }),
+        logout: () => fetchJson('/api/auth/logout', { method: 'POST' }, { suppressUnauthorizedEvent: true }),
         webauthn: {
             registerBegin: () => fetchJson('/api/auth/webauthn/register/begin', { method: 'POST' }),
             registerComplete: (data) => fetchJson('/api/auth/webauthn/register/complete', {
@@ -86,12 +91,12 @@ export const api = {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username })
-            }),
+            }, { suppressUnauthorizedEvent: true }),
             loginComplete: (data) => fetchJson('/api/auth/webauthn/login/complete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
-            })
+            }, { suppressUnauthorizedEvent: true })
         }
     },
     notes: {
@@ -157,6 +162,11 @@ export const api = {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ password })
+        }),
+        update: (shareId, data) => fetchJson(`/api/share/${shareId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
         }),
         delete: (shareId) => fetchJson(`/api/share/${shareId}`, { method: 'DELETE' })
     },

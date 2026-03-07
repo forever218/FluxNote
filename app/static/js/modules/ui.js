@@ -1,5 +1,6 @@
 import { api } from './api.js';
 import { state } from './state.js';
+import { offlineStore } from './offline.js';
 import { formatDate, escapeHtml, parseWikiLinks, showToast } from './utils.js';
 import { editor } from './editor.js';
 import { loadMermaidIfNeeded } from '/static/js/markdown-renderer.js';
@@ -672,9 +673,15 @@ export const ui = {
             document.body.appendChild(tooltip);
         }
 
+        let data;
         const res = await api.stats.heatmap();
-        if (!res || !res.ok) return;
-        const data = await res.json();
+        if (res && res.ok) {
+            data = await res.json();
+            offlineStore.setHeatmap(data);
+        } else {
+            data = offlineStore.getHeatmap();
+            if (!data || Object.keys(data).length === 0) return;
+        }
 
         container.innerHTML = '';
 
@@ -755,14 +762,21 @@ export const ui = {
 
     async renderOverviewStats() {
         if (!state.currentUser) return;
+
+        let data;
         const res = await api.stats.overview();
         if (res && res.ok) {
-            const data = await res.json();
-            document.getElementById('statsSection').style.display = 'block';
-            document.getElementById('statNoteCount').textContent = data.notes;
-            document.getElementById('statTagCount').textContent = data.tags;
-            document.getElementById('statDayCount').textContent = data.days;
+            data = await res.json();
+            offlineStore.setStats(data);
+        } else {
+            data = offlineStore.getStats();
+            if (!data) return;
         }
+
+        document.getElementById('statsSection').style.display = 'block';
+        document.getElementById('statNoteCount').textContent = data.notes;
+        document.getElementById('statTagCount').textContent = data.tags;
+        document.getElementById('statDayCount').textContent = data.days;
     },
 
     handleHashJump() {

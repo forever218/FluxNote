@@ -1,8 +1,8 @@
-import { api, checkOnlineStatus } from './api.js';
+import { api } from './api.js';
 import { state } from './state.js';
-import { showToast } from './utils.js';
+import { offlineStore } from './offline.js';
+import { showToast, showConfirm } from './utils.js';
 
-// 离线模式标记
 let offlineMode = false;
 
 // DOM Elements
@@ -15,65 +15,68 @@ const authUsernameInput = document.getElementById('authUsername');
 const authPasswordInput = document.getElementById('authPassword');
 const authSwitchContainer = document.querySelector('.auth-switch');
 
-// 状态：是否允许注册
 let canRegister = true;
 
+function setSessionRevoked(flag) {
+    state.sessionRevoked = flag;
+    offlineStore.setSessionRevoked(flag);
+}
+
 export const auth = {
+
+    revokeSession() {
+        const preservedUser = state.currentUser || offlineStore.getUser();
+        setSessionRevoked(true);
+        if (preservedUser) {
+            state.currentUser = preservedUser;
+            offlineStore.setUser(preservedUser);
+        }
+        showToast('会话已过期，已切换到离线编辑模式，请重新登录后同步', 5000);
+        console.log('[Auth] Session revoked, keep local editing mode');
+    },
+
     async checkStatus(callbacks = {}) {
-        // 检查离线状态
         if (!navigator.onLine) {
             console.log('[Auth] Offline mode detected');
             offlineMode = true;
-            // 尝试使用缓存的用户状态
-            const cachedUser = localStorage.getItem('cached_user');
-            if (cachedUser) {
-                try {
-                    state.currentUser = JSON.parse(cachedUser);
-                    this.updateUI(true);
-                    showToast('离线模式 - 显示缓存内容');
-                    // 触发回调加载缓存数据
-                    if (callbacks.onLogin) callbacks.onLogin();
-                    return;
-                } catch (e) {
-                    console.error('Failed to parse cached user:', e);
-                }
+            const user = offlineStore.getUser();
+            if (user) {
+                state.currentUser = user;
+                state.sessionRevoked = offlineStore.isSessionRevoked();
+                this.updateUI(true);
+                showToast(state.sessionRevoked ? '离线编辑模式 - 重新登录后可同步' : '离线模式 - 显示缓存内容');
+                if (callbacks.onLogin) callbacks.onLogin();
+            } else {
+                setSessionRevoked(false);
+                this.updateUI(false);
+                showToast('离线模式 - 请连接网络登录');
+                if (callbacks.onLogout) callbacks.onLogout();
             }
-            // 没有缓存，显示访客模式
-            this.updateUI(false);
-            showToast('离线模式 - 请连接网络');
-            // 触发回调来显示离线提示
-            if (callbacks.onLogout) callbacks.onLogout();
             return;
         }
 
         try {
-            // 同时检查登录状态和注册状态
             const [statusResp, registerResp] = await Promise.all([
                 api.auth.status(),
                 fetch('/api/auth/can-register').catch(() => null)
             ]);
 
             if (!statusResp) {
-                // 网络请求失败，尝试使用缓存
                 console.log('[Auth] Status check failed, trying cache');
-                const cachedUser = localStorage.getItem('cached_user');
-                if (cachedUser) {
-                    try {
-                        state.currentUser = JSON.parse(cachedUser);
-                        this.updateUI(true);
-                        if (callbacks.onLogin) callbacks.onLogin();
-                    } catch (e) {
-                        console.error('Failed to parse cached user:', e);
-                        if (callbacks.onLogout) callbacks.onLogout();
-                    }
+                const user = offlineStore.getUser();
+                if (user) {
+                    state.currentUser = user;
+                    state.sessionRevoked = offlineStore.isSessionRevoked();
+                    this.updateUI(true);
+                    if (callbacks.onLogin) callbacks.onLogin();
                 } else {
+                    setSessionRevoked(false);
                     if (callbacks.onLogout) callbacks.onLogout();
                 }
                 return;
             }
             const data = await statusResp.json();
 
-            // 更新注册状态
             if (registerResp && registerResp.ok) {
                 const registerData = await registerResp.json();
                 canRegister = registerData.can_register;
@@ -81,32 +84,37 @@ export const auth = {
 
             if (data.is_authenticated) {
                 state.currentUser = data.user;
-                // 缓存用户状态供离线使用
-                localStorage.setItem('cached_user', JSON.stringify(data.user));
+                offlineStore.setUser(data.user);
+                setSessionRevoked(false);
                 this.updateUI(true);
                 if (callbacks.onLogin) callbacks.onLogin();
             } else {
-                state.currentUser = null;
-                localStorage.removeItem('cached_user');
-                this.updateUI(false);
-                if (callbacks.onLogout) callbacks.onLogout();
+                const user = offlineStore.getUser();
+                if (user) {
+                    state.currentUser = user;
+                    this.revokeSession();
+                    this.updateUI(true);
+                    if (callbacks.onSessionRevoked) callbacks.onSessionRevoked();
+                    else if (callbacks.onLogin) callbacks.onLogin();
+                } else {
+                    state.currentUser = null;
+                    setSessionRevoked(false);
+                    this.updateUI(false);
+                    if (callbacks.onLogout) callbacks.onLogout();
+                }
             }
 
             offlineMode = false;
         } catch (e) {
             console.error("Auth check failed (network/server error):", e);
-            // 处理后端服务器宕机或网络错误导致的 fetch 异常
-            const cachedUser = localStorage.getItem('cached_user');
-            if (cachedUser) {
-                try {
-                    state.currentUser = JSON.parse(cachedUser);
-                    this.updateUI(true);
-                    if (callbacks.onLogin) callbacks.onLogin();
-                } catch (err) {
-                    console.error('Failed to parse cached user:', err);
-                    if (callbacks.onLogout) callbacks.onLogout();
-                }
+            const user = offlineStore.getUser();
+            if (user) {
+                state.currentUser = user;
+                state.sessionRevoked = offlineStore.isSessionRevoked();
+                this.updateUI(true);
+                if (callbacks.onLogin) callbacks.onLogin();
             } else {
+                setSessionRevoked(false);
                 this.updateUI(false);
                 if (callbacks.onLogout) callbacks.onLogout();
             }
@@ -127,31 +135,25 @@ export const auth = {
             if (el) {
                 el.style.display = display;
                 el.classList.remove('animate-fade-in');
-                void el.offsetWidth; // Trigger reflow
+                void el.offsetWidth;
                 el.classList.add('animate-fade-in');
             }
         };
         const hide = (el) => { if (el) el.style.display = 'none'; };
 
         if (isLoggedIn) {
-            // Owner Mode
             show(userProfile, 'flex');
             hide(blogBrand);
-
             show(ownerNav);
             hide(guestFooter);
-
             show(noteInputSection);
             if (userNameDisplay) userNameDisplay.textContent = state.currentUser.username;
             show(statsSection);
         } else {
-            // Guest/Blog Mode
             hide(userProfile);
             show(blogBrand);
-
             hide(ownerNav);
             show(guestFooter);
-
             hide(noteInputSection);
             show(statsSection);
         }
@@ -159,7 +161,6 @@ export const auth = {
 
     openModal(isLogin) {
         if (authModal) {
-            // 如果不允许注册且尝试打开注册模式，强制切换到登录模式
             if (!isLogin && !canRegister) {
                 isLogin = true;
                 showToast('系统已注册，请登录');
@@ -170,7 +171,6 @@ export const auth = {
             if (authTitle) authTitle.textContent = isLogin ? '登录' : '注册';
             if (authSubmitBtn) authSubmitBtn.textContent = isLogin ? '登录' : '注册';
 
-            // 根据是否允许注册显示/隐藏注册切换区域
             if (authSwitchContainer) {
                 authSwitchContainer.style.display = canRegister ? 'block' : 'none';
             }
@@ -191,14 +191,12 @@ export const auth = {
     async loginWithWebAuthn(onSuccess) {
         try {
             const username = authUsernameInput.value.trim();
-            // Start Authentication
             const resp = await api.auth.webauthn.loginBegin(username);
             if (!resp || !resp.ok) {
                 throw new Error('API_START_FAILED');
             }
             const options = await resp.json();
 
-            // Transform some fields from base64 back to Uint8Array
             options.challenge = Uint8Array.from(atob(options.challenge.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
             if (options.allowCredentials) {
                 options.allowCredentials.forEach(cred => {
@@ -208,7 +206,6 @@ export const auth = {
 
             const assertion = await navigator.credentials.get({ publicKey: options });
 
-            // Encode response for server
             const body = {
                 id: assertion.id,
                 rawId: btoa(String.fromCharCode(...new Uint8Array(assertion.rawId))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
@@ -235,7 +232,6 @@ export const auth = {
         } catch (e) {
             console.error("WebAuthn Login Error:", e);
             if (e.name === 'NotAllowedError' || e.name === 'AbortError') {
-                // User cancelled or timeout
                 auth.openModal(true);
             } else {
                 showToast('生物识别过程中出错');
@@ -254,7 +250,6 @@ export const auth = {
             }
             const options = await resp.json();
 
-            // Transform back
             options.challenge = Uint8Array.from(atob(options.challenge.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
             options.user.id = Uint8Array.from(atob(options.user.id.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
             if (options.excludeCredentials) {
@@ -277,7 +272,7 @@ export const auth = {
 
             const completeResp = await api.auth.webauthn.registerComplete(body);
             if (completeResp && completeResp.ok) {
-                localStorage.setItem('has_webauthn', 'true'); // 标记本设备已绑定
+                localStorage.setItem('has_webauthn', 'true');
                 showToast('指纹/面容绑定成功');
             } else {
                 showToast('绑定失败');
@@ -298,7 +293,6 @@ export const auth = {
             return;
         }
 
-        // 如果是注册模式，再次检查是否允许注册
         if (mode === 'register' && !canRegister) {
             showToast('系统已注册，不允许新用户注册');
             return;
@@ -315,7 +309,6 @@ export const auth = {
                 await this.checkStatus({ onLogin: onSuccess });
             } else {
                 showToast(data.error || '操作失败');
-                // 如果是注册失败（可能因为系统已有用户），更新 canRegister 状态
                 if (mode === 'register' && response.status === 403) {
                     canRegister = false;
                 }
@@ -324,7 +317,16 @@ export const auth = {
     },
 
     async logout() {
+        if (offlineStore.hasPendingData()) {
+            const confirmed = await showConfirm(
+                '还有未同步的离线内容，退出后将丢失这些数据。确定要退出吗？',
+                { title: '未同步数据', type: 'danger' }
+            );
+            if (!confirmed) return;
+        }
         await api.auth.logout();
+        offlineStore.clearAll();
+        state.sessionRevoked = false;
         window.location.reload();
     }
 };
@@ -337,12 +339,9 @@ export function initAuthEvents(onLoginSuccess) {
 
     if (showLoginBtn) {
         showLoginBtn.addEventListener('click', async () => {
-            // Smart Toggle: Try WebAuthn first if this device has used it before
             if (localStorage.getItem('has_webauthn') === 'true' && window.PublicKeyCredential) {
                 try {
                     const success = await auth.loginWithWebAuthn(onLoginSuccess);
-                    // If logic inside loginWithWebAuthn handles success and closeModal, we are done.
-                    // But we need to know if it was cancelled to show the modal.
                     return;
                 } catch (e) {
                     auth.openModal(true);
@@ -384,7 +383,6 @@ export function initAuthEvents(onLoginSuccess) {
     if (authSwitchBtn) {
         authSwitchBtn.addEventListener('click', (e) => {
             e.preventDefault();
-            // 如果不允许注册，阻止切换到注册模式
             if (!canRegister) {
                 showToast('系统已注册，不允许新用户注册');
                 return;
@@ -399,9 +397,8 @@ export function initAuthEvents(onLoginSuccess) {
     });
 
     window.addEventListener('auth:unauthorized', () => {
-        state.currentUser = null;
-        auth.updateUI(false);
-        // Optional: show login modal
-        // auth.openModal(true);
+        if (state.sessionRevoked) return;
+        auth.revokeSession();
+        auth.updateUI(!!state.currentUser);
     });
 }

@@ -1,6 +1,7 @@
-import { api } from './api.js';
+import { api, fetchJson } from './api.js';
 import { state, setState } from './state.js';
 import { ui } from './ui.js';
+import { offlineStore } from './offline.js';
 import { showToast, debounce, throttle, parseWikiLinks, escapeHtml, showConfirm, formatDate, formatExpiresAt, renderMarkdownToContainer } from './utils.js';
 
 // 防止重复绑定的标志
@@ -27,6 +28,7 @@ export function initGlobalEvents(context) {
     // Daily Review
     document.getElementById('navDailyReview')?.addEventListener('click', async (e) => {
         e.preventDefault();
+        if (!navigator.onLine || state.sessionRevoked) return showToast('离线模式暂不支持每日回顾');
         const modal = document.getElementById('reviewModal');
         const list = document.getElementById('reviewList');
         
@@ -39,7 +41,6 @@ export function initGlobalEvents(context) {
             
             const outsideClick = (ev) => { if(ev.target === modal) modal.style.display = 'none'; };
             window.addEventListener('click', outsideClick);
-            // Cleanup on close to avoid leaking listeners if needed, but for modal simple toggle is fine.
 
             const res = await api.notes.review();
             if (res) {
@@ -60,6 +61,8 @@ export function initGlobalEvents(context) {
                 list.appendChild(fragment);
                 
                 if (window.hljs) hljs.highlightAll();
+            } else {
+                list.innerHTML = '<div style="text-align:center; padding:20px; color:var(--slate-400);"><i class="fas fa-wifi-slash"></i><p>网络不可用</p></div>';
             }
         }
     });
@@ -67,6 +70,7 @@ export function initGlobalEvents(context) {
     // Knowledge Graph
     document.getElementById('navGraph')?.addEventListener('click', async (e) => {
         e.preventDefault();
+        if (!navigator.onLine || state.sessionRevoked) return showToast('离线模式暂不支持知识图谱');
         const modal = document.getElementById('graphModal');
         if (modal) {
             modal.style.display = 'block';
@@ -83,8 +87,8 @@ export function initGlobalEvents(context) {
             }
 
             try {
-                const res = await fetch('/api/notes/graph');
-                if (!res.ok) throw new Error('获取数据失败');
+                const res = await fetchJson('/api/notes/graph');
+                if (!res) throw new Error('获取数据失败');
                 const data = await res.json();
                 
                 const container = document.getElementById('graphContainer');
@@ -252,6 +256,7 @@ function initSharesModal() {
 
     document.getElementById('navShares')?.addEventListener('click', async (e) => {
         e.preventDefault();
+        if (!navigator.onLine || state.sessionRevoked) return showToast('离线模式暂不支持管理分享');
         const modal = document.getElementById('sharesModal');
         const list = document.getElementById('sharesList');
 
@@ -267,7 +272,7 @@ function initSharesModal() {
 
             try {
                 const response = await api.share.list();
-                if (response.ok) {
+                if (response && response.ok) {
                     allShares = await response.json();
                     renderSharesList(allShares);
                 } else {
@@ -365,8 +370,8 @@ function initSharesModal() {
         list.querySelectorAll('.expire-share-btn').forEach(btn => {
             btn.onclick = async () => {
                 if(await showConfirm('确定要让此分享立即过期吗？', { title: '设为过期', type: 'danger' })) {
-                    const res = await fetch(`/api/share/${btn.dataset.id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({expire_now: true})});
-                    if(res.ok) {
+                    const res = await fetchJson(`/api/share/${btn.dataset.id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({expire_now: true})});
+                    if(res && res.ok) {
                         const data = await (await api.share.list()).json();
                         allShares = data;
                         renderSharesList(allShares);
@@ -459,7 +464,7 @@ function showEditShareModal(shareId, hasPassword, isExpired, onSuccess) {
         }
 
         try {
-            const res = await fetch(`/api/share/${currentEditShareId}`, {
+            const res = await fetchJson(`/api/share/${currentEditShareId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -468,13 +473,15 @@ function showEditShareModal(shareId, hasPassword, isExpired, onSuccess) {
                 })
             });
 
-            if (res.ok) {
+            if (res && res.ok) {
                 modal.style.display = 'none';
                 showToast(warningDiv.style.display !== 'none' ? '分享已重新激活' : '分享设置已更新');
                 if (onSuccess) onSuccess();
-            } else {
+            } else if (res) {
                 const data = await res.json();
                 showToast(data.error || '更新失败');
+            } else {
+                showToast('网络连接失败');
             }
         } catch (err) {
             console.error(err);
@@ -770,18 +777,15 @@ function initEditorLogic(loadNotes) {
             capsule_hint: capsuleHint
         };
 
-        if (!navigator.onLine) {
+        if (!navigator.onLine || state.sessionRevoked) {
             const draftId = Date.now();
             const draft = {
                 _id: draftId,
                 ...payload,
                 created_at: new Date().toISOString()
             };
-            const drafts = JSON.parse(localStorage.getItem('offline_drafts') || '[]');
-            drafts.push(draft);
-            localStorage.setItem('offline_drafts', JSON.stringify(drafts));
+            offlineStore.addDraft(draft);
 
-            // UI Optimistic Update
             const tempNote = {
                 id: `offline-${draftId}`,
                 content: draft.content,
@@ -833,16 +837,13 @@ function initEditorLogic(loadNotes) {
                 loadNotes(true);
                 showToast(isCapsule ? '已封存' : '已记录');
             } else if (res === null) {
-                // Backend unreachable, fallback to offline logic
                 const draftId = Date.now();
                 const draft = {
                     _id: draftId,
                     ...payload,
                     created_at: new Date().toISOString()
                 };
-                const drafts = JSON.parse(localStorage.getItem('offline_drafts') || '[]');
-                drafts.push(draft);
-                localStorage.setItem('offline_drafts', JSON.stringify(drafts));
+                offlineStore.addDraft(draft);
 
                 const tempNote = {
                     id: `offline-${draftId}`,
@@ -914,6 +915,7 @@ function initEditorLogic(loadNotes) {
     // Image Upload
     const imageUploadBtn = document.querySelector('.memo-editor .tool-btn[title="上传图片"]');
     imageUploadBtn?.addEventListener('click', () => {
+        if (!navigator.onLine || state.sessionRevoked) return showToast('离线模式暂不支持上传图片');
         const fileInput = document.createElement('input');
         fileInput.type = 'file';
         fileInput.accept = 'image/*';
@@ -994,7 +996,7 @@ function initCustomEvents(loadNotes, loadTags) {
         if(!await showConfirm('确定要删除这条笔记吗？', { title: '删除笔记', type: 'danger' })) return;
         
         const id = e.detail;
-        if (!navigator.onLine) {
+        if (!navigator.onLine || state.sessionRevoked) {
             handleOfflineDelete(id);
             return;
         }
@@ -1013,7 +1015,7 @@ function initCustomEvents(loadNotes, loadTags) {
     });
 
     window.addEventListener('note:permanent-delete', async (e) => {
-        if (!navigator.onLine) return showToast('离线模式暂不支持彻底删除');
+        if (!navigator.onLine || state.sessionRevoked) return showToast('离线模式暂不支持彻底删除');
         if(!await showConfirm('彻底删除后无法恢复，确定吗？', { title: '彻底删除', type: 'danger' })) return;
 
         const res = await api.notes.permanentDelete(e.detail);
@@ -1027,7 +1029,7 @@ function initCustomEvents(loadNotes, loadTags) {
     });
 
     window.addEventListener('note:restore', async (e) => {
-        if (!navigator.onLine) return showToast('离线模式暂不支持恢复笔记');
+        if (!navigator.onLine || state.sessionRevoked) return showToast('离线模式暂不支持恢复笔记');
         const res = await api.notes.restore(e.detail);
         if (res && res.ok) {
             showToast('已恢复');
@@ -1063,7 +1065,7 @@ function initCustomEvents(loadNotes, loadTags) {
             capsule_hint: note.capsule_hint
         };
 
-        if (!navigator.onLine) {
+        if (!navigator.onLine || state.sessionRevoked) {
             handleOfflineUpdate(id, { content: newContent });
             note.content = newContent;
             ui.restoreCard(note);
@@ -1100,7 +1102,7 @@ function initCustomEvents(loadNotes, loadTags) {
             note.capsule_hint = capsule_hint;
         };
 
-        if (!navigator.onLine) {
+        if (!navigator.onLine || state.sessionRevoked) {
             handleOfflineUpdate(id, updatePayload);
             syncNoteState(note);
             if (note) ui.restoreCard(note);
@@ -1128,6 +1130,7 @@ function initCustomEvents(loadNotes, loadTags) {
     });
 
     window.addEventListener('note:history', async (e) => {
+        if (!navigator.onLine || state.sessionRevoked) return showToast('离线模式暂不支持查看历史版本');
         const noteId = e.detail;
         const modal = document.getElementById('versionModal');
         const list = document.getElementById('versionList');
@@ -1192,6 +1195,7 @@ function initCustomEvents(loadNotes, loadTags) {
 
     // 分享功能
     window.addEventListener('note:share', async (e) => {
+        if (!navigator.onLine || state.sessionRevoked) return showToast('离线模式暂不支持分享');
         const noteId = e.detail;
         const note = state.notes.find(n => n.id == noteId);
         if (!note) return;
@@ -1304,9 +1308,11 @@ function initCustomEvents(loadNotes, loadTags) {
 
                             showToast('分享链接创建成功');
                         }
-                    } else {
+                    } else if (res) {
                         const errorData = await res.json();
                         showToast(errorData.message || '创建分享失败');
+                    } else {
+                        showToast('网络连接失败，请稍后重试');
                     }
                 } catch (err) {
                     console.error('创建分享失败:', err);
@@ -1348,9 +1354,11 @@ function initCustomEvents(loadNotes, loadTags) {
 
                     if (res && res.ok) {
                         showToast('分享设置已更新');
-                    } else {
+                    } else if (res) {
                         const errorData = await res.json();
                         showToast(errorData.message || '更新失败');
+                    } else {
+                        showToast('网络连接失败');
                     }
                 } catch (err) {
                     console.error('更新分享失败:', err);
@@ -1401,72 +1409,16 @@ function initCustomEvents(loadNotes, loadTags) {
         }
     });
 
-    document.getElementById('updateShare')?.addEventListener('click', async () => {
-        const shareUrl = document.getElementById('shareUrl');
-        const shareId = shareUrl?.dataset.shareId;
-        const noteId = shareUrl?.dataset.noteId;
-        if (!shareId || !noteId) return;
-
-        const password = document.getElementById('sharePassword').value.trim();
-        const expires = document.getElementById('shareExpires').value;
-
-        await api.share.delete(shareId);
-
-        let expiresIn = null;
-        if (expires === '24') expiresIn = 24;
-        else if (expires === '168') expiresIn = 168;
-        else if (expires === '720') expiresIn = 720;
-
-        const res = await api.share.create({
-            note_id: noteId,
-            password: document.getElementById('sharePasswordEnabled').checked ? password : '',
-            expires_in: expiresIn
-        });
-
-        if (res && res.ok) {
-            const data = await res.json();
-            const url = data.share.url;
-            shareUrl.value = url.startsWith('http') ? url : window.location.origin + url;
-            shareUrl.dataset.shareId = data.share.id;
-            showToast('设置已更新');
-        } else {
-            showToast('更新失败');
-        }
-    });
 }
 
 function handleOfflineDelete(id) {
-    if (id.startsWith('draft-') || id.startsWith('offline-')) {
-        let drafts = JSON.parse(localStorage.getItem('offline_drafts') || '[]');
-        const draftId = parseInt(id.split('-').pop());
-        drafts = drafts.filter(d => d._id !== draftId);
-        localStorage.setItem('offline_drafts', JSON.stringify(drafts));
-    } else {
-        const deletes = JSON.parse(localStorage.getItem('offline_deletes') || '[]');
-        if (!deletes.some(d => (typeof d === 'string' ? d === id : d.id === id))) {
-            deletes.push({ id, timestamp: Date.now() });
-            localStorage.setItem('offline_deletes', JSON.stringify(deletes));
-        }
-    }
+    offlineStore.addDelete(id);
     removeCardFromUI(id);
     showToast('已删除 (离线)');
 }
 
 function handleOfflineUpdate(id, updates) {
-    if (id.toString().startsWith('draft-') || id.toString().startsWith('offline-')) {
-        let drafts = JSON.parse(localStorage.getItem('offline_drafts') || '[]');
-        const draftId = parseInt(id.toString().split('-').pop());
-        const targetDraft = drafts.find(d => d._id === draftId);
-        if (targetDraft) {
-            Object.assign(targetDraft, updates);
-            localStorage.setItem('offline_drafts', JSON.stringify(drafts));
-        }
-    } else {
-        const offlineUpdates = JSON.parse(localStorage.getItem('offline_updates') || '{}');
-        const existing = offlineUpdates[id] || {};
-        offlineUpdates[id] = { ...existing, ...updates };
-        localStorage.setItem('offline_updates', JSON.stringify(offlineUpdates));
-    }
+    offlineStore.addUpdate(id, updates);
 }
 
 function initCapsuleModal(loadNotes) {

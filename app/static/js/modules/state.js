@@ -10,7 +10,8 @@ export const state = {
     isLoading: false,
     hasNextPage: true,
     galleryViewer: null,
-    isTrashMode: false
+    isTrashMode: false,
+    sessionRevoked: false
 };
 
 export function setState(key, value) {
