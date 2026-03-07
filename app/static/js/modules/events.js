@@ -1531,17 +1531,17 @@ function renderCapsules(capsules, loadNotes, closeCapsuleModal) {
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在开启...';
             
             try {
-                const res = await api.notes.openCapsule(id);
-                if (res && res.ok) {
+                const res = await fetch(`/api/notes/capsules/${id}/open`, { method: 'POST' });
+                if (res.ok) {
                     showToast('⌛ 时光胶囊已拆开');
-                    // 重新加载胶囊列表
                     const capsulesRes = await api.notes.capsules();
-                    const updatedCapsules = await capsulesRes.json();
-                    renderCapsules(updatedCapsules, loadNotes, closeCapsuleModal);
-                    // 同时刷新主流
+                    if (capsulesRes && capsulesRes.ok) {
+                        const updatedCapsules = await capsulesRes.json();
+                        renderCapsules(updatedCapsules, loadNotes, closeCapsuleModal);
+                    }
                     loadNotes(true);
                 } else {
-                    const data = await res.json();
+                    const data = await res.json().catch(() => ({}));
                     showToast(data.error || '开启失败');
                     btn.disabled = false;
                     btn.innerHTML = '拆开信封';
