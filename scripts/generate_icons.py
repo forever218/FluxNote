@@ -1,179 +1,216 @@
 """
 图标生成脚本
-从源 SVG 程序化生成各尺寸的 PWA 图标（标准 + maskable）
+通过本机浏览器的无头截图能力，将源 SVG 真实渲染为各尺寸的 PWA 图标。
 
 使用方法:
     python scripts/generate_icons.py
 
-需要安装: pip install Pillow
+依赖:
+    - Pillow
+    - 本机已安装 Edge 或 Chrome
 """
 
 import os
 import sys
-import math
+import subprocess
+import tempfile
+from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from PIL import Image
 
-try:
-    from PIL import Image, ImageDraw
-except ImportError:
-    print("错误: 需要安装 Pillow")
-    print("请运行: pip install Pillow")
-    sys.exit(1)
-
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-ICONS_DIR = os.path.join(PROJECT_ROOT, 'app', 'static', 'img', 'icons')
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+STATIC_DIR = PROJECT_ROOT / 'app' / 'static'
+ICONS_DIR = PROJECT_ROOT / 'app' / 'static' / 'img' / 'icons'
+SVG_PATH = ICONS_DIR / 'icon.svg'
+FAVICON_PATH = STATIC_DIR / 'favicon.ico'
 
 STANDARD_SIZES = [72, 96, 128, 144, 152, 180, 192, 384, 512]
 MASKABLE_SIZES = [192, 512]
+ICO_SIZES = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64)]
 MASKABLE_PADDING_RATIO = 0.1
+MASTER_RENDER_SIZE = 4096
+MASTER_VIEWPORT_PADDING = 256
 
-# 与 icon.svg 一致的配色
-BG_COLOR_TOP = (59, 130, 246)       # #3B82F6 Blue-500
-BG_COLOR_BOTTOM = (29, 78, 216)     # #1D4ED8 Blue-700
-BLOCK_COLOR = (59, 130, 246)        # #3B82F6
-
-
-def draw_rounded_rect(draw, xy, radius, fill):
-    x0, y0, x1, y1 = xy
-    r = min(radius, (x1 - x0) // 2, (y1 - y0) // 2)
-    draw.rectangle([x0 + r, y0, x1 - r, y1], fill=fill)
-    draw.rectangle([x0, y0 + r, x1, y1 - r], fill=fill)
-    draw.pieslice([x0, y0, x0 + 2*r, y0 + 2*r], 180, 270, fill=fill)
-    draw.pieslice([x1 - 2*r, y0, x1, y0 + 2*r], 270, 360, fill=fill)
-    draw.pieslice([x0, y1 - 2*r, x0 + 2*r, y1], 90, 180, fill=fill)
-    draw.pieslice([x1 - 2*r, y1 - 2*r, x1, y1], 0, 90, fill=fill)
+BROWSER_PATHS = [
+    Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
+    Path(r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"),
+    Path(r"C:\Users\Soulxyz\AppData\Local\Microsoft\Edge\Application\msedge.exe"),
+    Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
+    Path(r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
+    Path(r"C:\Users\Soulxyz\AppData\Local\Google\Chrome\Application\chrome.exe"),
+]
 
 
-def create_gradient_bg(size):
-    """创建蓝色渐变圆角矩形背景"""
-    img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-    radius = int(size * 112 / 512)
-
-    mask = Image.new('L', (size, size), 0)
-    mask_draw = ImageDraw.Draw(mask)
-    draw_rounded_rect(mask_draw, (0, 0, size - 1, size - 1), radius, 255)
-
-    for y in range(size):
-        t = y / max(size - 1, 1)
-        r = int(BG_COLOR_TOP[0] * (1 - t) + BG_COLOR_BOTTOM[0] * t)
-        g = int(BG_COLOR_TOP[1] * (1 - t) + BG_COLOR_BOTTOM[1] * t)
-        b = int(BG_COLOR_TOP[2] * (1 - t) + BG_COLOR_BOTTOM[2] * t)
-        for x in range(size):
-            if mask.getpixel((x, y)) > 0:
-                img.putpixel((x, y), (r, g, b, 255))
-    return img
+def find_browser():
+    """查找可用于无头截图的浏览器。"""
+    for path in BROWSER_PATHS:
+        if path.exists():
+            return path
+    raise RuntimeError("未找到 Edge 或 Chrome，无法进行 SVG 真实渲染。")
 
 
-def draw_note_shape(draw, size):
-    """在画布上绘制笔记形状（白色纸张+折角+蓝色内容块）"""
-    s = size / 512.0
-
-    # 纸张主体（白色圆角矩形 + 右上折角缺口）
-    paper_left = int(140 * s)
-    paper_top = int(120 * s)
-    paper_right = int(380 * s)
-    paper_bottom = int(394 * s)
-    fold_x = int(310 * s)
-    fold_y = int(190 * s)
-    corner_r = int(24 * s)
-
-    draw_rounded_rect(draw, (paper_left, paper_top, paper_right, paper_bottom), corner_r, (255, 255, 255, 255))
-    # 折角三角区域用背景色覆盖（模拟缺口），然后画折页
-    draw.polygon([
-        (fold_x, paper_top),
-        (paper_right, paper_top),
-        (paper_right, fold_y),
-        (fold_x, paper_top)
-    ], fill=(0, 0, 0, 0))
-
-    # 折页（浅灰渐变效果简化为纯色）
-    fold_color = (226, 232, 240, 255)  # #E2E8F0
-    draw.polygon([
-        (fold_x, paper_top),
-        (paper_right, fold_y),
-        (fold_x, fold_y),
-    ], fill=fold_color)
-
-    # 模块化内容块（蓝色圆角条）
-    blocks = [
-        (196, 196, 76, 28, 1.0),
-        (284, 196, 56, 28, 0.25),
-        (196, 244, 48, 28, 0.25),
-        (256, 244, 88, 28, 1.0),
-        (196, 292, 112, 28, 1.0),
-    ]
-    for bx, by, bw, bh, opacity in blocks:
-        x0 = int(bx * s)
-        y0 = int(by * s)
-        x1 = int((bx + bw) * s)
-        y1 = int((by + bh) * s)
-        br = int(14 * s)
-        alpha = int(255 * opacity)
-        color = (*BLOCK_COLOR, alpha)
-        draw_rounded_rect(draw, (x0, y0, x1, y1), br, color)
+def build_wrapper_html(render_size, viewport_size):
+    """创建一个透明背景页面，在更大画布中居中渲染 SVG。"""
+    svg_uri = SVG_PATH.resolve().as_uri()
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body {{
+      margin: 0;
+      width: {viewport_size}px;
+      height: {viewport_size}px;
+      overflow: hidden;
+      background: transparent;
+    }}
+    body {{
+      display: grid;
+      place-items: center;
+    }}
+    img {{
+      display: block;
+      width: {render_size}px;
+      height: {render_size}px;
+      image-rendering: auto;
+    }}
+  </style>
+</head>
+<body>
+  <img src="{svg_uri}" alt="FluxNote icon" />
+</body>
+</html>
+"""
 
 
-def generate_icon(size):
-    """生成标准图标"""
-    base = create_gradient_bg(size)
-    draw = ImageDraw.Draw(base, 'RGBA')
-    draw_note_shape(draw, size)
-    return base
+def render_master_icon(render_size, browser_path):
+    """使用浏览器在更大画布上渲染 SVG，再中心裁切出母版。"""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        html_path = tmp_path / "render-icon.html"
+        viewport_size = render_size + MASTER_VIEWPORT_PADDING * 2
+        raw_png_path = tmp_path / f"icon-raw-{viewport_size}.png"
+        html_path.write_text(
+            build_wrapper_html(render_size, viewport_size),
+            encoding="utf-8",
+        )
+
+        command = [
+            str(browser_path),
+            "--headless=new",
+            "--disable-gpu",
+            "--hide-scrollbars",
+            "--no-first-run",
+            "--disable-default-apps",
+            "--force-device-scale-factor=1",
+            "--default-background-color=00000000",
+            f"--window-size={viewport_size},{viewport_size}",
+            f"--screenshot={raw_png_path}",
+            html_path.resolve().as_uri(),
+        ]
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        if completed.returncode != 0 or not raw_png_path.exists():
+            raise RuntimeError(
+                "浏览器截图失败。\n"
+                f"stdout:\n{completed.stdout}\n"
+                f"stderr:\n{completed.stderr}"
+            )
+        raw_image = Image.open(raw_png_path).convert("RGBA")
+        left = MASTER_VIEWPORT_PADDING
+        top = MASTER_VIEWPORT_PADDING
+        right = left + render_size
+        bottom = top + render_size
+        return raw_image.crop((left, top, right, bottom))
 
 
-def generate_maskable_icon(size):
-    """生成 maskable 图标：标准图标缩放到安全区域(80%)"""
-    inner = generate_icon(size)
+def resize_icon(master_icon, size):
+    """从同一张高分辨率母版统一缩放出目标尺寸。"""
+    return master_icon.resize((size, size), Image.Resampling.LANCZOS)
+
+
+def generate_maskable(icon, size):
+    """基于标准图标生成 maskable 版本。"""
     padding = int(size * MASKABLE_PADDING_RATIO)
     inner_size = size - 2 * padding
 
-    bg_color = (
-        (BG_COLOR_TOP[0] + BG_COLOR_BOTTOM[0]) // 2,
-        (BG_COLOR_TOP[1] + BG_COLOR_BOTTOM[1]) // 2,
-        (BG_COLOR_TOP[2] + BG_COLOR_BOTTOM[2]) // 2,
-        255
-    )
+    bg_color = (10, 168, 117, 255)
     canvas = Image.new('RGBA', (size, size), bg_color)
-    scaled = inner.resize((inner_size, inner_size), Image.Resampling.LANCZOS)
+    scaled = icon.resize((inner_size, inner_size), Image.Resampling.LANCZOS)
     canvas.paste(scaled, (padding, padding), scaled)
     return canvas
 
 
+def generate_favicon(master_icon):
+    """从高清母版导出多尺寸 favicon.ico。"""
+    FAVICON_PATH.parent.mkdir(parents=True, exist_ok=True)
+    master_icon.save(
+        FAVICON_PATH,
+        format='ICO',
+        sizes=ICO_SIZES,
+    )
+
+
 def main():
     print("=" * 50)
-    print("  流光笔记 PWA 图标生成器")
+    print("  流光笔记 PWA 图标生成器 (SVG → PNG)")
     print("=" * 50)
 
-    os.makedirs(ICONS_DIR, exist_ok=True)
+    if not SVG_PATH.exists():
+        print(f"\n错误: 找不到源 SVG 文件: {SVG_PATH}")
+        sys.exit(1)
 
-    # 1. 标准图标
+    browser_path = find_browser()
+    ICONS_DIR.mkdir(parents=True, exist_ok=True)
+    print(f"\n源文件: {SVG_PATH}")
+    print(f"浏览器: {browser_path}")
+    print(f"母版尺寸: {MASTER_RENDER_SIZE}x{MASTER_RENDER_SIZE}")
+
+    master_icon = render_master_icon(MASTER_RENDER_SIZE, browser_path)
+
     print("\n── 标准图标 ──")
+    icons_cache = {}
     for size in STANDARD_SIZES:
-        icon = generate_icon(size)
-        path = os.path.join(ICONS_DIR, f'icon-{size}.png')
+        icon = resize_icon(master_icon, size)
+        icons_cache[size] = icon
+        path = ICONS_DIR / f'icon-{size}.png'
         icon.save(path, 'PNG', optimize=True)
         print(f"  ✓ icon-{size}.png ({size}x{size})")
 
-    # 2. Maskable 图标
     print("\n── Maskable 图标 ──")
     for size in MASKABLE_SIZES:
-        icon = generate_maskable_icon(size)
-        path = os.path.join(ICONS_DIR, f'icon-maskable-{size}.png')
-        icon.save(path, 'PNG', optimize=True)
+        if size in icons_cache:
+            base = icons_cache[size]
+        else:
+            base = resize_icon(master_icon, size)
+        maskable = generate_maskable(base, size)
+        path = ICONS_DIR / f'icon-maskable-{size}.png'
+        maskable.save(path, 'PNG', optimize=True)
         print(f"  ✓ icon-maskable-{size}.png ({size}x{size})")
 
-    # 3. Apple Touch Icon (180x180, 白色不透明背景)
     print("\n── Apple Touch Icon ──")
-    apple = generate_icon(180)
+    if 180 in icons_cache:
+        apple_rgba = icons_cache[180]
+    else:
+        apple_rgba = resize_icon(master_icon, 180)
     apple_rgb = Image.new('RGB', (180, 180), (255, 255, 255))
-    apple_rgb.paste(apple, (0, 0), apple)
-    apple_path = os.path.join(ICONS_DIR, 'apple-touch-icon.png')
+    apple_rgb.paste(apple_rgba, (0, 0), apple_rgba)
+    apple_path = ICONS_DIR / 'apple-touch-icon.png'
     apple_rgb.save(apple_path, 'PNG', optimize=True)
-    print(f"  ✓ apple-touch-icon.png (180x180)")
+    print("  ✓ apple-touch-icon.png (180x180)")
 
-    total = len(STANDARD_SIZES) + len(MASKABLE_SIZES) + 1
+    print("\n── Favicon ──")
+    generate_favicon(master_icon)
+    print("  ✓ favicon.ico (16/24/32/48/64)")
+
+    total = len(STANDARD_SIZES) + len(MASKABLE_SIZES) + 2
     print(f"\n所有图标生成完成! 共 {total} 个文件")
     print(f"输出目录: {ICONS_DIR}\n")
 

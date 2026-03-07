@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
     <defs>
-        <!-- App 图标基底渐变 (经典效率蓝) -->
+        <!-- App 图标基底渐变 (翡翠绿) -->
         <linearGradient id="appBg" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stop-color="#3B82F6"/> <!-- Tailwind Blue 500 -->
-            <stop offset="100%" stop-color="#1D4ED8"/> <!-- Tailwind Blue 700 -->
+            <stop offset="0%" stop-color="#10B981"/>
+            <stop offset="100%" stop-color="#059669"/>
         </linearGradient>
 
         <!-- 折角的自然过渡渐变 -->
@@ -12,10 +12,10 @@
             <stop offset="100%" stop-color="#E2E8F0"/>
         </linearGradient>
 
-        <!-- 内部模块化笔记块的现代蓝色渐变 -->
+        <!-- 内部模块化笔记块的翡翠绿渐变 -->
         <linearGradient id="blockGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stop-color="#3B82F6"/>
-            <stop offset="100%" stop-color="#2563EB"/>
+            <stop offset="0%" stop-color="#10B981"/>
+            <stop offset="100%" stop-color="#059669"/>
         </linearGradient>
 
         <!-- 主文档的柔和下拉阴影 -->
