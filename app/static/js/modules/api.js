@@ -111,7 +111,12 @@ export const api = {
             if (tag) url += `&tag=${encodeURIComponent(tag)}`;
             return fetchJson(url);
         },
-        trash: (page = 1) => fetchJson(`/api/notes/trash?page=${page}&per_page=20`),
+        trash: (page = 1, keyword = '') => {
+            let url = `/api/notes/trash?page=${page}&per_page=20`;
+            if (keyword) url += `&q=${encodeURIComponent(keyword)}`;
+            return fetchJson(url);
+        },
+        emptyTrash: () => fetchJson('/api/notes/trash', { method: 'DELETE' }),
         create: (data) => fetchJson('/api/notes', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -148,6 +153,14 @@ export const api = {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
+        }),
+        transcribe: (formData) => fetchJson('/api/ai/transcribe', {
+            method: 'POST',
+            body: formData
+        }),
+        saveAudio: (formData) => fetchJson('/api/ai/audio/save', {
+            method: 'POST',
+            body: formData
         })
     },
     share: {

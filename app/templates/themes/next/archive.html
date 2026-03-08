@@ -29,7 +29,7 @@
                         <li class="next-archive-item">
                             <time class="next-archive-date">{{ note.created_at.strftime('%m-%d') }}</time>
                             <a href="{{ url_for('blog.post', note_id=note.id) }}" class="next-archive-link">
-                                {{ note.title or '无标题' }}
+                                {{ note.display_title or '无标题' }}
                             </a>
                         </li>
                         {% endfor %}

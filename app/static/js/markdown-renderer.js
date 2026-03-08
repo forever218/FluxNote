@@ -150,12 +150,20 @@ export async function renderContent(container, content, options = {}) {
             html = marked.parse(processed);
         }
 
-        // 5. 安全清理
         if (typeof DOMPurify !== 'undefined') {
-            html = DOMPurify.sanitize(html);
+            html = DOMPurify.sanitize(html, {
+                ADD_TAGS: ['audio', 'source', 'video', 'iframe'],
+                ADD_ATTR: ['controls', 'src', 'type', 'preload', 'autoplay', 'muted', 'loop', 'poster',
+                           'width', 'height', 'frameborder', 'allowfullscreen', 'allow',
+                           'referrerpolicy', 'loading', 'srcdoc', 'scrolling'],
+            });
         }
 
         container.innerHTML = html;
+
+        // 5.5 B站链接 → 卡片（在 DOMPurify 之后操作 DOM，卡片 HTML 可信）
+        convertBilibiliLinksToCards(container);
+        loadBilibiliCards(container);
 
         // 6. 渲染 Mermaid 图表（按需懒加载）
         if (enableMermaid) {
@@ -263,14 +271,136 @@ export async function renderMermaidBlocks(container) {
     }
 }
 
-/**
- * 初始化 Markdown 渲染器配置
- * @param {Object} config - 插件配置项
- */
+// ==================== B站视频卡片 ====================
+
+const BILI_SVG_SM = `<svg viewBox="0 0 24 24" width="14" height="14" fill="#fb7299" aria-hidden="true"><path d="M17.813 4.653h.854c1.51.054 2.769.578 3.773 1.574 1.004.995 1.524 2.249 1.56 3.76v7.36c-.036 1.51-.556 2.769-1.56 3.773s-2.262 1.524-3.773 1.56H5.333c-1.51-.036-2.769-.556-3.773-1.56S.036 18.858 0 17.347v-7.36c.036-1.511.556-2.765 1.56-3.76 1.004-.996 2.262-1.52 3.773-1.574h.774l-1.174-1.12a1.234 1.234 0 0 1-.373-.906c0-.356.124-.658.373-.907l.027-.027c.267-.249.573-.373.92-.373.347 0 .653.124.92.373L7.547 4.653h8.907l1.387-1.4a1.234 1.234 0 0 1 .92-.373c.347 0 .653.124.92.373.267.249.4.551.4.907a1.234 1.234 0 0 1-.4.906l-1.267 1.187zM2.547 17.347c-.014.627.204 1.16.654 1.6.45.44.987.663 1.613.667h13.44c.627-.004 1.16-.227 1.6-.667.44-.44.663-.973.667-1.6v-7.36c-.004-.627-.227-1.16-.667-1.6-.44-.44-.973-.663-1.6-.667H4.814c-.626.004-1.163.227-1.613.667-.45.44-.668.973-.654 1.6v7.36zM8 13.333a1.333 1.333 0 1 1-2.667 0 1.333 1.333 0 0 1 2.667 0zm10.667 0a1.333 1.333 0 1 1-2.667 0 1.333 1.333 0 0 1 2.667 0z"/></svg>`;
+const BILI_SVG_LG = `<svg viewBox="0 0 24 24" width="36" height="36" fill="rgba(255,255,255,0.85)" aria-hidden="true"><path d="M17.813 4.653h.854c1.51.054 2.769.578 3.773 1.574 1.004.995 1.524 2.249 1.56 3.76v7.36c-.036 1.51-.556 2.769-1.56 3.773s-2.262 1.524-3.773 1.56H5.333c-1.51-.036-2.769-.556-3.773-1.56S.036 18.858 0 17.347v-7.36c.036-1.511.556-2.765 1.56-3.76 1.004-.996 2.262-1.52 3.773-1.574h.774l-1.174-1.12a1.234 1.234 0 0 1-.373-.906c0-.356.124-.658.373-.907l.027-.027c.267-.249.573-.373.92-.373.347 0 .653.124.92.373L7.547 4.653h8.907l1.387-1.4a1.234 1.234 0 0 1 .92-.373c.347 0 .653.124.92.373.267.249.4.551.4.907a1.234 1.234 0 0 1-.4.906l-1.267 1.187zM2.547 17.347c-.014.627.204 1.16.654 1.6.45.44.987.663 1.613.667h13.44c.627-.004 1.16-.227 1.6-.667.44-.44.663-.973.667-1.6v-7.36c-.004-.627-.227-1.16-.667-1.6-.44-.44-.973-.663-1.6-.667H4.814c-.626.004-1.163.227-1.613.667-.45.44-.668.973-.654 1.6v7.36zM8 13.333a1.333 1.333 0 1 1-2.667 0 1.333 1.333 0 0 1 2.667 0zm10.667 0a1.333 1.333 0 1 1-2.667 0 1.333 1.333 0 0 1 2.667 0z"/></svg>`;
+
+export function extractBilibiliId(url) {
+    if (!url) return null;
+    let m = url.match(/bilibili\.com\/video\/(BV[\w]+)/i);
+    if (m) return m[1];
+    m = url.match(/b23\.tv\/(BV[\w]+)/i);
+    if (m) return m[1];
+    m = url.match(/bilibili\.com\/video\/av(\d+)/i);
+    if (m) return `av${m[1]}`;
+    return null;
+}
+
+export function createBilibiliCardHtml(bvid) {
+    return `<div class="bilibili-card" data-bvid="${bvid}" role="button" tabindex="0">` +
+        `<div class="bili-card-thumb">` +
+            `<div class="bili-thumb-placeholder">${BILI_SVG_LG}</div>` +
+            `<div class="bili-play-btn"><i class="fas fa-play"></i></div>` +
+        `</div>` +
+        `<div class="bili-card-content">` +
+            `<div class="bili-card-brand-row">${BILI_SVG_SM}<span class="bili-brand-name">bilibili</span></div>` +
+            `<div class="bili-card-title" data-loading="true">加载中…</div>` +
+            `<div class="bili-card-meta"><span class="bili-card-bvid">${bvid}</span></div>` +
+        `</div>` +
+        `<div class="bili-card-arrow"><i class="fas fa-chevron-right"></i></div>` +
+    `</div>`;
+}
+
+export function loadBilibiliCards(container) {
+    if (!container) return;
+    container.querySelectorAll('.bilibili-card[data-bvid]:not([data-loaded])').forEach(card => {
+        const bvid = card.dataset.bvid;
+        if (!bvid) return;
+        card.dataset.loaded = 'loading';
+
+        fetch(`/api/bilibili/info?bvid=${encodeURIComponent(bvid)}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data || data.error) { card.dataset.loaded = 'error'; return; }
+
+                const titleEl = card.querySelector('.bili-card-title');
+                if (titleEl && data.title) {
+                    titleEl.textContent = data.title;
+                    titleEl.removeAttribute('data-loading');
+                    card.title = data.title;
+                }
+
+                const metaEl = card.querySelector('.bili-card-meta');
+                if (metaEl && data.owner && !metaEl.querySelector('.bili-card-owner')) {
+                    const ownerSpan = document.createElement('span');
+                    ownerSpan.className = 'bili-card-owner';
+                    ownerSpan.textContent = data.owner;
+                    metaEl.appendChild(ownerSpan);
+                }
+
+                if (data.cover) {
+                    const thumbEl = card.querySelector('.bili-card-thumb');
+                    if (thumbEl) {
+                        const img = new Image();
+                        img.loading = 'lazy';
+                        img.referrerPolicy = 'no-referrer';
+                        img.alt = data.title || bvid;
+                        img.onerror = () => img.remove();
+                        img.src = data.cover;
+                        thumbEl.insertBefore(img, thumbEl.firstChild);
+                    }
+                }
+
+                card.dataset.loaded = 'true';
+            })
+            .catch(() => {
+                const titleEl = card.querySelector('.bili-card-title');
+                if (titleEl) { titleEl.textContent = bvid; titleEl.removeAttribute('data-loading'); }
+                card.dataset.loaded = 'error';
+            });
+    });
+}
+
+function convertBilibiliLinksToCards(container) {
+    container.querySelectorAll('a').forEach(link => {
+        const bvid = extractBilibiliId(link.href);
+        if (!bvid) return;
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = createBilibiliCardHtml(bvid);
+        const card = wrapper.firstChild;
+        const parent = link.parentElement;
+        if (parent && parent.tagName === 'P' && parent.childNodes.length === 1) {
+            parent.replaceWith(card);
+        } else {
+            link.replaceWith(card);
+        }
+    });
+}
+
+// ==================== Marked 渲染器 ====================
+
+function mediaRenderer() {
+    const audioExts = /\.(mp3|wav|ogg|m4a|flac|aac|webm)$/i;
+    const videoExts = /\.(mp4|webm|ogg|mov)$/i;
+
+    return {
+        link({ href, title, tokens }) {
+            if (audioExts.test(href)) {
+                return `<audio controls preload="metadata" src="${href}"></audio>`;
+            }
+            if (videoExts.test(href)) {
+                return `<div class="video-wrapper"><video controls preload="metadata" src="${href}"></video></div>`;
+            }
+            let text;
+            try {
+                text = this.parser && tokens ? this.parser.parseInline(tokens) : null;
+            } catch (_) {
+                text = null;
+            }
+            if (!text) {
+                text = (tokens && tokens.map) ? tokens.map(t => t.raw ?? t.text ?? '').join('') : '';
+                text = text || href;
+            }
+            const titleAttr = title ? ` title="${title}"` : '';
+            return `<a href="${href}"${titleAttr}>${text}</a>`;
+        }
+    };
+}
+
 export function initMarkdownRenderer(config = {}) {
-    // 配置 marked
     if (typeof marked !== 'undefined') {
-        marked.use({ gfm: true, breaks: true });
+        marked.use({ gfm: true, breaks: true, renderer: mediaRenderer() });
     }
 
     // 配置 highlight.js
@@ -318,14 +448,14 @@ export async function initThemePlugins(container) {
 
     // 3. 图片查看器
     if (window.Viewer) {
-        // 销毁旧实例（如果存在）- 这里简化处理，直接绑定新实例
-        // Viewer.js 会自动处理重复绑定吗？通常最好是 new Viewer(element)
-        // 我们的 container 通常是 .blog-main，如果是 SPA 切换，container 内容是新的，所以是安全的。
         new window.Viewer(container, {
             button: true, navbar: false, title: false,
             toolbar: { zoomIn: 1, zoomOut: 1, oneToOne: 1, reset: 1 }
         });
     }
+
+    // 4. B站视频卡片元数据加载（服务端渲染的页面已输出卡片 HTML）
+    loadBilibiliCards(container);
 }
 
 // 默认导出
@@ -338,5 +468,8 @@ export default {
     renderMermaidBlocks,
     initThemePlugins,
     loadMermaidIfNeeded,
-    hasMermaidContent
+    hasMermaidContent,
+    extractBilibiliId,
+    createBilibiliCardHtml,
+    loadBilibiliCards
 };

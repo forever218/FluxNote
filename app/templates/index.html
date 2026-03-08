@@ -36,16 +36,53 @@
     <!-- Mermaid Diagrams - 移除首屏加载，改为懒加载 -->
 
     <script defer>
-        // Configure Marked - runs after DOM ready due to defer
         document.addEventListener('DOMContentLoaded', () => {
             if (typeof marked !== 'undefined') {
+                const audioExts = /\.(mp3|wav|ogg|m4a|flac|aac|webm)$/i;
+                const videoExts = /\.(mp4|webm|ogg|mov)$/i;
+                function extractBilibiliId(url) {
+                    if (!url) return null;
+                    let m = url.match(/bilibili\.com\/video\/(BV[\w]+)/i);
+                    if (m) return m[1];
+                    m = url.match(/b23\.tv\/(BV[\w]+)/i);
+                    if (m) return m[1];
+                    m = url.match(/bilibili\.com\/video\/av(\d+)/i);
+                    if (m) return 'av' + m[1];
+                    return null;
+                }
                 marked.use({
                     gfm: true,
-                    breaks: true
+                    breaks: true,
+                    renderer: {
+                        link: function({ href, title, tokens }) {
+                            // 先判断特殊类型，不需要解析 tokens 文本
+                            var bvid = extractBilibiliId(href);
+                            if (bvid) {
+                                var src = bvid.startsWith('av')
+                                    ? 'https://player.bilibili.com/player.html?aid=' + bvid.slice(2) + '&high_quality=1'
+                                    : 'https://player.bilibili.com/player.html?bvid=' + bvid + '&high_quality=1';
+                                return '<div class="video-wrapper bilibili-wrapper"><iframe src="' + src + '&as_wide=1" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true" allow="autoplay; fullscreen; encrypted-media" referrerpolicy="no-referrer"></iframe></div>';
+                            }
+                            if (audioExts.test(href)) {
+                                return '<audio controls preload="metadata" src="' + href + '"></audio>';
+                            }
+                            if (videoExts.test(href)) {
+                                return '<div class="video-wrapper"><video controls preload="metadata" src="' + href + '"></video></div>';
+                            }
+                            // 普通链接才解析文本，防御 this.parser 未注入的情况
+                            var text;
+                            try {
+                                text = this.parser && tokens ? this.parser.parseInline(tokens) : null;
+                            } catch(_) { text = null; }
+                            if (!text) text = (tokens && tokens.map) ? tokens.map(function(t){ return t.raw || t.text || ''; }).join('') : '';
+                            text = text || href;
+                            var titleAttr = title ? ' title="' + title + '"' : '';
+                            return '<a href="' + href + '"' + titleAttr + '>' + text + '</a>';
+                        }
+                    }
                 });
             }
 
-            // Configure Highlight.js
             if (typeof hljs !== 'undefined') {
                 hljs.configure({ ignoreUnescapedHTML: true });
             }
@@ -174,6 +211,10 @@
                     <input type="text" id="searchInput" placeholder="搜索...">
                     <button class="search-clear-btn" id="searchClearBtn" type="button"><i class="fas fa-times"></i></button>
                 </div>
+                <button id="emptyTrashBtn" class="empty-trash-btn" style="display:none;" title="清空回收站">
+                    <i class="fas fa-trash-alt"></i>
+                    <span>清空回收站</span>
+                </button>
             </header>
 
             <!-- Banner 已移除，保持清爽 -->
@@ -483,7 +524,8 @@
     </div>
 
     <!-- ECharts for Knowledge Graph -->
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js" defer></script>
+    <!-- CDN 优先使用南科大镜像（cdnjs）: https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/<pkg>/<version>/<file> -->
+    <script src="https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/echarts/5.5.0/echarts.min.js" defer></script>
     
     <!-- PWA Logic (Admin Only) -->
     <script type="module" src={{ static_v("js/pwa.js") }}></script>

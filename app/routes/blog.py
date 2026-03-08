@@ -244,7 +244,7 @@ def archive():
     return render_theme_template('archive.html',
         archives=archives,
         year_notes=year_notes,
-        total_notes=len(notes),
+        total_count=len(notes),
         stats=stats,
         heatmap_data=heatmap_data,
         popular_tags=popular_tags,

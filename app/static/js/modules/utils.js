@@ -1,3 +1,17 @@
+export const SANITIZE_CONFIG = {
+    ADD_TAGS: ['audio', 'source', 'video', 'iframe'],
+    ADD_ATTR: ['controls', 'src', 'type', 'preload', 'autoplay', 'muted', 'loop', 'poster',
+               'width', 'height', 'frameborder', 'allowfullscreen', 'allow',
+               'referrerpolicy', 'loading', 'srcdoc', 'scrolling',
+               'data-bvid', 'role', 'tabindex'],
+    ALLOW_UNKNOWN_PROTOCOLS: false,
+};
+
+export function sanitizeHtml(html) {
+    if (typeof DOMPurify === 'undefined') return html;
+    return DOMPurify.sanitize(html, SANITIZE_CONFIG);
+}
+
 export function showToast(message) {
     const toast = document.getElementById('toast');
     if (toast) {
@@ -188,9 +202,7 @@ export async function renderMarkdownToContainer(rawContent, containerDOM, uiRef 
                 content = parseWikiLinks(content);
             }
             let html = marked.parse(content);
-            if (typeof DOMPurify !== 'undefined') {
-                html = DOMPurify.sanitize(html);
-            }
+            html = sanitizeHtml(html);
             containerDOM.innerHTML = html;
 
             if (uiRef && uiRef.renderMermaid) {

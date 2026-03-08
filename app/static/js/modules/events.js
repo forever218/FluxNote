@@ -227,6 +227,19 @@ export function initGlobalEvents(context) {
             }
         }
 
+        // Handle Bilibili Card Clicks — expand to iframe player
+        const biliCard = e.target.closest('.bilibili-card');
+        if (biliCard) {
+            const bvid = biliCard.dataset.bvid;
+            if (!bvid) return;
+            const src = `https://player.bilibili.com/player.html?bvid=${bvid}&high_quality=1&as_wide=1&autoplay=0`;
+            const wrapper = document.createElement('div');
+            wrapper.className = 'video-wrapper bilibili-wrapper';
+            wrapper.innerHTML = `<iframe src="${src}" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true" allow="autoplay; fullscreen; encrypted-media" referrerpolicy="no-referrer"></iframe>`;
+            biliCard.replaceWith(wrapper);
+            return;
+        }
+
         // Handle Wiki Link Clicks
         const wikiLink = e.target.closest('.wiki-link');
         if (wikiLink) {
@@ -1037,6 +1050,21 @@ function initCustomEvents(loadNotes, loadTags) {
             loadTags();
         } else {
             showToast('恢复失败');
+        }
+    });
+
+    document.getElementById('emptyTrashBtn')?.addEventListener('click', async () => {
+        if (!navigator.onLine || state.sessionRevoked) return showToast('离线模式暂不支持此操作');
+        const confirmed = await showConfirm('将永久删除回收站中的所有笔记，无法恢复，确定吗？', { title: '清空回收站', type: 'danger' });
+        if (!confirmed) return;
+        const res = await api.notes.emptyTrash();
+        if (res && res.ok) {
+            const data = await res.json();
+            showToast(`已清空，共删除 ${data.deleted ?? 0} 条笔记`);
+            loadNotes(true);
+            loadTags();
+        } else {
+            showToast('清空失败，请重试');
         }
     });
 

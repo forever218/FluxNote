@@ -1,6 +1,7 @@
 from app.models import Config
 import json
 import openai
+import httpx
 
 class AIService:
     @staticmethod
@@ -138,6 +139,64 @@ class AIService:
         {content[:2000]}
         """
         return AIService.chat_completion([{"role": "user", "content": prompt}])
+
+    @staticmethod
+    def get_stt_config():
+        """Get STT (Speech-to-Text) configuration"""
+        stt_json = Config.get('stt_config', '{}')
+        try:
+            return json.loads(stt_json)
+        except:
+            return {}
+
+    @staticmethod
+    def save_stt_config(config):
+        """Save STT configuration"""
+        Config.set('stt_config', json.dumps(config))
+
+    @staticmethod
+    def transcribe_audio(audio_file, filename='audio.webm'):
+        """Transcribe audio using dedicated STT config or active AI provider"""
+        stt = AIService.get_stt_config()
+        base_url = stt.get('base_url', '').strip()
+        api_key = stt.get('api_key', '').strip()
+        model = stt.get('model', '').strip() or 'FunAudioLLM/SenseVoiceSmall'
+
+        if not base_url or not api_key:
+            provider = AIService.get_active_provider()
+            if not provider:
+                raise Exception("请先在设置中配置语音转写服务，或配置 AI 模型")
+            base_url = base_url or provider['base_url']
+            api_key = api_key or provider['api_key']
+
+        mime_map = {
+            '.webm': 'audio/webm', '.mp4': 'audio/mp4', '.m4a': 'audio/m4a',
+            '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg',
+        }
+        ext = '.' + filename.rsplit('.', 1)[-1].lower() if '.' in filename else '.webm'
+        mime_type = mime_map.get(ext, 'audio/webm')
+
+        try:
+            with httpx.Client(timeout=60) as http:
+                resp = http.post(
+                    f"{base_url.rstrip('/')}/audio/transcriptions",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    files={"file": (filename, audio_file, mime_type)},
+                    data={"model": model},
+                )
+            if resp.status_code == 404:
+                raise Exception("当前服务商不支持语音转写接口，请在设置内更换。")
+            if resp.status_code != 200:
+                detail = resp.text[:200]
+                raise Exception(f"语音转写失败 (HTTP {resp.status_code}): {detail}")
+            result = resp.json()
+            return result.get('text', '')
+        except httpx.HTTPError as e:
+            raise Exception(f"语音转写网络错误: {str(e)}")
+        except Exception as e:
+            if '语音转写' in str(e) or '服务商' in str(e):
+                raise
+            raise Exception(f"语音转写失败: {str(e)}")
 
     @staticmethod
     def get_custom_prompts():

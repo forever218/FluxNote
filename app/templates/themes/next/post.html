@@ -2,16 +2,16 @@
 {% from "macros/meta.html" import seo_meta %}
 
 {% block meta %}
-{{ seo_meta(note.title or '无标题', note.get_excerpt(160), 'article') }}
+{{ seo_meta(note.display_title or '无标题', note.get_excerpt(160), 'article') }}
 {% endblock %}
 
-{% block title %}{{ note.title or '无标题' }} | {{ site_title }}{% endblock %}
+{% block title %}{{ note.display_title or '无标题' }} | {{ site_title }}{% endblock %}
 
 {% block content %}
 <div class="next-container">
     <article class="next-article">
         <header class="next-article-header">
-            <h1 class="next-article-title">{{ note.title or '无标题' }}</h1>
+            <h1 class="next-article-title">{{ note.display_title or '无标题' }}</h1>
             <div class="next-article-meta">
                 <time>
                     <i class="far fa-calendar"></i>

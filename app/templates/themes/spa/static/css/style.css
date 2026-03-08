@@ -538,4 +538,67 @@
         font-weight: 600;
         color: var(--slate-700);
     }
+
+    /* 笔记卡片移动端 */
+    .theme-spa .note-card {
+        padding: 16px;
+        border-radius: 10px;
+        margin-bottom: 14px;
+    }
+    .theme-spa .note-card:hover:not(.empty-card) {
+        transform: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .theme-spa .note-header-row {
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+    }
+
+    /* B站视频卡片 — 竖向堆叠 */
+    .theme-spa .bilibili-card {
+        flex-direction: column;
+        max-width: 100%;
+    }
+    .theme-spa .bili-card-thumb {
+        width: 100%; min-width: unset;
+        height: 0; padding-bottom: 52%; position: relative;
+    }
+    .theme-spa .bili-card-thumb img { position: absolute; }
+    .theme-spa .bili-card-content { padding: 10px 12px; }
+    .theme-spa .bili-card-arrow { display: none; }
+
+    /* 媒体 */
+    .note-content .video-wrapper { max-width: 100% !important; border-radius: 6px; }
+    .note-content audio { max-width: 100%; }
+}
+
+/* Media: audio / video / bilibili iframe */
+.note-content audio {
+    display: block; width: 100%; max-width: 420px; margin: 12px 0; border-radius: 8px; height: 40px;
+}
+.note-content video {
+    display: block; width: 100%; max-width: 100%; margin: 12px 0; border-radius: 8px;
+}
+.note-content .video-wrapper {
+    position: relative; width: 100%; max-width: 720px; margin: 16px 0;
+    padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 8px;
+    background: var(--slate-100, #f1f5f9);
+}
+.note-content .video-wrapper iframe,
+.note-content .video-wrapper video {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; border-radius: 8px;
+}
+.note-content .video-wrapper video { position: relative; height: auto; padding-bottom: 0; }
+.note-content .bilibili-wrapper { max-width: 800px; }
+.note-content .file-attachment {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; margin: 4px 0; border-radius: 6px;
+    background: var(--slate-100, #f1f5f9); border: 1px solid var(--slate-200, #e2e8f0);
+    color: var(--slate-700, #334155); text-decoration: none; font-size: 0.875rem;
+}
+.note-content .file-attachment:hover { background: var(--slate-200, #e2e8f0); }
+
+@media (max-width: 768px) {
+    .note-content .video-wrapper { max-width: 100%; }
+    .note-content audio { max-width: 100%; }
 }

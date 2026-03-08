@@ -218,6 +218,35 @@
             </div>
             
             <div style="border-top: 1px solid #eee; margin: 20px 0;"></div>
+
+            <div class="form-row">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                    <i class="fas fa-microphone" style="color:var(--primary);"></i>
+                    <span style="font-weight:600; font-size:14px;">语音转写 (STT)</span>
+                </div>
+                <p class="help-text" style="margin-bottom:15px;">
+                    配置语音输入使用的转写服务。推荐使用 <a href="https://cloud.siliconflow.cn/" target="_blank" style="color:var(--primary);">SiliconFlow（硅基流动）</a>，
+                    免费额度充足，中文识别效果好。不配置时将使用上方激活的 AI 模型。
+                </p>
+                <div class="form-row">
+                    <label>API Base URL</label>
+                    <input type="text" id="sttBaseUrl" value="https://api.siliconflow.cn/v1">
+                </div>
+                <div class="form-row">
+                    <label>API Key <span style="color:#ef4444;">*</span></label>
+                    <input type="password" id="sttApiKey" placeholder="填入你的 SiliconFlow API Key">
+                </div>
+                <div class="form-row">
+                    <label>模型名称</label>
+                    <input type="text" id="sttModel" value="FunAudioLLM/SenseVoiceSmall">
+                    <p class="help-text">可选模型：FunAudioLLM/SenseVoiceSmall（免费、中文优秀）、TeleAI/TeleSpeechASR（方言支持）</p>
+                </div>
+                <button class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="saveSTTConfig()">
+                    <i class="fas fa-save"></i> 保存语音转写配置
+                </button>
+            </div>
+
+            <div style="border-top: 1px solid #eee; margin: 20px 0;"></div>
             
             <div class="form-row">
                 <label>润色风格 (逗号分隔)</label>
@@ -395,7 +424,7 @@
             loadCustomPrompts();
             loadThemes();
             loadCommentStats();
-            // 评论列表在展开时才加载
+            loadSTTConfig();
         });
 
         // ... existing loadSettings ...
@@ -780,6 +809,41 @@
             } catch (e) {
                 showToast('网络错误', 'error');
             }
+        }
+
+        async function loadSTTConfig() {
+            try {
+                const response = await fetch('/api/ai/stt/config');
+                const data = await response.json();
+                if (data.base_url) document.getElementById('sttBaseUrl').value = data.base_url;
+                if (data.api_key_masked) document.getElementById('sttApiKey').value = data.api_key_masked;
+                else document.getElementById('sttApiKey').value = '';
+                if (data.model) document.getElementById('sttModel').value = data.model;
+            } catch (e) {}
+        }
+
+        async function saveSTTConfig() {
+            const baseUrl = document.getElementById('sttBaseUrl').value.trim();
+            const apiKey = document.getElementById('sttApiKey').value.trim();
+            const model = document.getElementById('sttModel').value.trim();
+
+            try {
+                const response = await fetch('/api/ai/stt/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        base_url: baseUrl,
+                        api_key: apiKey,
+                        model: model
+                    })
+                });
+                if (response.ok) {
+                    showToast('语音转写配置已保存', 'success');
+                    loadSTTConfig();
+                } else {
+                    showToast('保存失败', 'error');
+                }
+            } catch(e) { showToast('保存失败', 'error'); }
         }
 
         async function savePolishStyles() {

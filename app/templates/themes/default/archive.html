@@ -29,7 +29,7 @@
                         <li class="blog-archive-post">
                             <span class="blog-archive-post-date">{{ note.created_at.strftime('%m-%d') }}</span>
                             <a href="{{ url_for('blog.post', note_id=note.id) }}" class="blog-archive-post-title">
-                                {{ note.title or '无标题' }}
+                                {{ note.display_title or '无标题' }}
                             </a>
                         </li>
                         {% endfor %}

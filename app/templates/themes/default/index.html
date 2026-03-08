@@ -22,7 +22,7 @@
             {% for note in notes %}
             <article class="blog-article-card">
                 <a href="{{ url_for('blog.post', note_id=note.id) }}" class="blog-article-link">
-                    <h2 class="blog-article-title">{{ note.title or '无标题' }}</h2>
+                    <h2 class="blog-article-title">{{ note.display_title or '无标题' }}</h2>
                     <div class="blog-article-meta">
                         <span class="blog-article-date">
                             <i class="far fa-calendar-alt"></i>

@@ -1,7 +1,7 @@
 import { api } from './api.js';
 import { state } from './state.js';
 import { ui } from './ui.js';
-import { showToast, getCaretCoordinates, debounce } from './utils.js';
+import { showToast, getCaretCoordinates, debounce, sanitizeHtml } from './utils.js';
 
 export const editor = {
     init(textareaId) {
@@ -16,6 +16,7 @@ export const editor = {
         this.setupMarkdownShortcuts(textarea);
         this.setupAITools(textarea);
         this.setupCapsuleTool(textarea);
+        this.setupVoiceInput(textarea);
         this.setupAutoHeight(textarea);
     },
 
@@ -91,19 +92,16 @@ export const editor = {
             if (response) {
                 const data = await response.json();
                 if (response.ok) {
-                    // Insert markdown
-                    const pos = textarea.selectionStart;
-                    const text = textarea.value;
-                    const md = `\n![image](${data.url})\n`;
-                    // textarea.setRangeText is better but lets support older browsers slightly or standard way
+                    const md = `\n![${data.filename || 'image'}](${data.url})\n`;
                     if (textarea.setRangeText) {
                         textarea.setRangeText(md);
                     } else {
-                        textarea.value = text.slice(0, pos) + md + text.slice(pos);
+                        const pos = textarea.selectionStart;
+                        textarea.value = textarea.value.slice(0, pos) + md + textarea.value.slice(pos);
                     }
                     showToast('图片上传成功');
                 } else {
-                    showToast('上传失败');
+                    showToast(data.error || '上传失败');
                 }
             }
         });
@@ -184,7 +182,11 @@ export const editor = {
             { label: '无序列表', value: '- ', icon: 'fas fa-list-ul', match: 'list' },
             { label: '代码块', value: '```\n\n```', icon: 'fas fa-code', match: 'code' },
             { label: '当前日期', value: () => new Date().toLocaleDateString(), icon: 'far fa-calendar-alt', match: 'date' },
-            { label: 'AI 助手', action: 'ai', icon: 'fas fa-magic', match: 'ai' }
+            { label: '分隔线', value: '\n---\n', icon: 'fas fa-minus', match: 'hr' },
+            { label: '上传文件', action: 'upload', icon: 'fas fa-upload', match: 'upload' },
+            { label: 'B站视频', action: 'bilibili', icon: 'fas fa-video', match: 'bilibili' },
+            { label: 'AI 助手', action: 'ai', icon: 'fas fa-magic', match: 'ai' },
+            { label: '语音输入', action: 'voice', icon: 'fas fa-microphone', match: 'voice' }
         ];
 
         textarea.addEventListener('input', debounce((e) => {
@@ -383,12 +385,8 @@ export const editor = {
     executeSlashCommand(textarea, cmd, matchStr, cursor) {
         let replacement = typeof cmd.value === 'function' ? cmd.value() : cmd.value;
         
-        if (cmd.action === 'ai') {
-            replacement = ''; 
-            // Trigger AI menu logic
-            // Assuming the AI button logic is available via existing click handler
-            // We need to find the AI button for THIS textarea context
-            // Reuse logic from setupAITools to find controls
+        if (cmd.action === 'ai' || cmd.action === 'voice') {
+            replacement = '';
             let controls = null;
             const memoEditor = textarea.closest('.memo-editor');
             if (memoEditor) controls = memoEditor.querySelector('.editor-footer .input-controls');
@@ -397,9 +395,48 @@ export const editor = {
                 if (inlineContainer) controls = inlineContainer.querySelector('.inline-tools-left');
             }
             if (controls) {
-                const btn = controls.querySelector('.ai-trigger');
-                if (btn) setTimeout(() => btn.click(), 50); // Small delay to let UI settle
+                const selector = cmd.action === 'voice' ? '.voice-trigger' : '.ai-trigger';
+                const btn = controls.querySelector(selector);
+                if (btn) setTimeout(() => btn.click(), 50);
             }
+        }
+
+        if (cmd.action === 'upload') {
+            replacement = '';
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.multiple = true;
+            input.accept = 'image/*,audio/*,video/*,.pdf,.zip,.rar,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.md';
+            input.onchange = async () => {
+                for (const file of Array.from(input.files)) {
+                    const fd = new FormData();
+                    fd.append('file', file);
+                    showToast('正在上传...');
+                    try {
+                        const res = await api.upload(fd);
+                        if (res && res.ok) {
+                            const d = await res.json();
+                            let md;
+                            if (d.type === 'image') md = `![${d.filename}](${d.url})`;
+                            else if (d.type === 'audio') md = `[${d.filename}](${d.url})`;
+                            else if (d.type === 'video') md = `[${d.filename}](${d.url})`;
+                            else md = `[${d.filename}](${d.url})`;
+                            textarea.setRangeText ? textarea.setRangeText('\n' + md + '\n') : (textarea.value += '\n' + md + '\n');
+                            showToast('上传成功');
+                        } else {
+                            const e = await res.json().catch(() => ({}));
+                            showToast(e.error || '上传失败');
+                        }
+                    } catch { showToast('上传失败'); }
+                }
+            };
+            input.click();
+        }
+
+        if (cmd.action === 'bilibili') {
+            replacement = '';
+            this._showBilibiliDialog(textarea);
+            return;
         }
 
         const text = textarea.value;
@@ -419,6 +456,62 @@ export const editor = {
             const newCursor = start + 4; // after ```\n
             textarea.setSelectionRange(newCursor, newCursor);
         }
+    },
+
+    _showBilibiliDialog(textarea) {
+        const existing = document.querySelector('.bilibili-input-dialog');
+        if (existing) existing.remove();
+
+        const dialog = document.createElement('div');
+        dialog.className = 'bilibili-input-dialog';
+        dialog.innerHTML = `
+            <div class="bili-dialog-backdrop"></div>
+            <div class="bili-dialog-box">
+                <div class="bili-dialog-header">
+                    <span class="bili-dialog-icon"><i class="fas fa-video"></i></span>
+                    <span class="bili-dialog-title">插入 B 站视频</span>
+                    <button class="bili-dialog-close" type="button"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="bili-dialog-body">
+                    <input class="bili-dialog-input" type="url" placeholder="https://www.bilibili.com/video/BV..." autocomplete="off" spellcheck="false">
+                    <p class="bili-dialog-hint">支持 BV 号链接，如 bilibili.com/video/BV1...</p>
+                </div>
+                <div class="bili-dialog-footer">
+                    <button class="bili-dialog-cancel btn btn-secondary" type="button">取消</button>
+                    <button class="bili-dialog-confirm btn btn-primary" type="button"><i class="fas fa-check"></i> 插入</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(dialog);
+        requestAnimationFrame(() => dialog.classList.add('show'));
+
+        const input = dialog.querySelector('.bili-dialog-input');
+        setTimeout(() => input.focus(), 80);
+
+        const close = () => {
+            dialog.classList.remove('show');
+            setTimeout(() => dialog.remove(), 200);
+            textarea.focus();
+        };
+
+        const confirm = () => {
+            const url = input.value.trim();
+            if (!url) { input.focus(); return; }
+            const md = `\n[${url}](${url})\n`;
+            textarea.setRangeText ? textarea.setRangeText(md) : (textarea.value += md);
+            textarea.dispatchEvent(new Event('input'));
+            close();
+        };
+
+        dialog.querySelector('.bili-dialog-close').onclick = close;
+        dialog.querySelector('.bili-dialog-cancel').onclick = close;
+        dialog.querySelector('.bili-dialog-confirm').onclick = confirm;
+        dialog.querySelector('.bili-dialog-backdrop').onclick = close;
+        input.onkeydown = (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); confirm(); }
+            if (e.key === 'Escape') { e.preventDefault(); close(); }
+        };
     },
 
     setupAITools(textarea) {
@@ -709,8 +802,8 @@ export const editor = {
                 const cleanText = fullText.trim().replace(/\n{3,}/g, '\n\n');
 
                 // Render Markdown
-                if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
-                    contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(cleanText));
+                if (typeof marked !== 'undefined') {
+                    contentDiv.innerHTML = sanitizeHtml(marked.parse(cleanText));
                 } else {
                     contentDiv.textContent = cleanText;
                 }
@@ -888,7 +981,7 @@ export const editor = {
             if (!dragOverlay) {
                 dragOverlay = document.createElement('div');
                 dragOverlay.className = 'drag-drop-overlay';
-                dragOverlay.innerHTML = '<i class="fas fa-cloud-upload-alt"></i><span>释放以上传图片</span>';
+                dragOverlay.innerHTML = '<i class="fas fa-cloud-upload-alt"></i><span>释放以上传文件</span>';
                 memoEditor.appendChild(dragOverlay);
             }
             dragOverlay.classList.add('active');
@@ -907,29 +1000,36 @@ export const editor = {
             const files = e.dataTransfer?.files;
             if (!files || files.length === 0) return;
 
-            const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
-            if (imageFiles.length === 0) return;
-
             e.preventDefault();
 
-            for (const file of imageFiles) {
+            for (const file of Array.from(files)) {
                 const formData = new FormData();
                 formData.append('file', file);
-                showToast('正在上传图片...');
+                showToast('正在上传...');
 
                 try {
                     const response = await api.upload(formData);
                     if (response && response.ok) {
                         const data = await response.json();
-                        const md = `\n![image](${data.url})\n`;
+                        let md;
+                        if (data.type === 'image') {
+                            md = `\n![${data.filename || 'image'}](${data.url})\n`;
+                        } else if (data.type === 'audio') {
+                            md = `\n[${data.filename || '音频'}](${data.url})\n`;
+                        } else if (data.type === 'video') {
+                            md = `\n[${data.filename || '视频'}](${data.url})\n`;
+                        } else {
+                            md = `\n[${data.filename || file.name}](${data.url})\n`;
+                        }
                         if (textarea.setRangeText) {
                             textarea.setRangeText(md);
                         } else {
                             textarea.value += md;
                         }
-                        showToast('图片上传成功');
+                        showToast('上传成功');
                     } else {
-                        showToast('上传失败');
+                        const err = await response.json().catch(() => ({}));
+                        showToast(err.error || '上传失败');
                     }
                 } catch (err) {
                     console.error('Upload error:', err);
@@ -968,6 +1068,463 @@ export const editor = {
                 handleDrop(e);
             }
         });
+    },
+
+    // 语音输入（基于 MediaRecorder + 后端 AI 转写）
+    setupVoiceInput(textarea) {
+        if (!navigator.mediaDevices || !window.MediaRecorder) return;
+
+        let controls = null;
+        const memoEditor = textarea.closest('.memo-editor');
+        if (memoEditor) {
+            controls = memoEditor.querySelector('.editor-footer .input-controls');
+        }
+        if (!controls) {
+            const inlineContainer = textarea.closest('.inline-editor-container');
+            if (inlineContainer) {
+                controls = inlineContainer.querySelector('.inline-tools-left');
+            }
+        }
+        if (!controls || controls.querySelector('.voice-trigger')) return;
+
+        const voiceBtn = document.createElement('button');
+        voiceBtn.type = 'button';
+        voiceBtn.className = 'tool-btn voice-trigger';
+        voiceBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+        voiceBtn.title = '语音输入';
+        voiceBtn.onclick = () => this.toggleVoiceRecording(textarea, voiceBtn);
+        controls.appendChild(voiceBtn);
+    },
+
+    _voiceMaxDuration: 300,
+
+    async toggleVoiceRecording(textarea, button) {
+        if (this._voiceActive) {
+            this._stopRecording(false);
+            return;
+        }
+
+        let stream;
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({
+                audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000 }
+            });
+        } catch (e) {
+            const msgs = {
+                NotAllowedError: '麦克风权限被拒绝，请在浏览器设置中允许麦克风访问',
+                NotFoundError: '未检测到麦克风设备，请连接后重试',
+                NotReadableError: '麦克风被其他应用占用，请关闭后重试',
+            };
+            showToast(msgs[e.name] || '无法访问麦克风，请检查设备连接');
+            return;
+        }
+
+        const preferred = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+        const mimeType = preferred.find(t => MediaRecorder.isTypeSupported(t)) || '';
+        const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+        const chunks = [];
+
+        this._voiceActive = true;
+        this._voiceRecorder = recorder;
+        this._voiceStream = stream;
+        this._voiceButton = button;
+        this._voiceTextarea = textarea;
+        this._voiceCancelled = false;
+
+        button.classList.add('voice-active');
+        button.innerHTML = '<i class="fas fa-stop"></i>';
+        button.title = '停止录音';
+
+        const overlay = this._createVoiceOverlay(textarea);
+        this._voiceOverlay = overlay;
+
+        recorder.ondataavailable = (e) => {
+            if (e.data.size > 0) chunks.push(e.data);
+        };
+
+        recorder.onstop = async () => {
+            stream.getTracks().forEach(t => t.stop());
+            this._clearTimer();
+
+            if (this._voiceCancelled) {
+                if (this._voiceOverlay) { this._voiceOverlay.remove(); this._voiceOverlay = null; }
+                return;
+            }
+
+            const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+            if (blob.size < 1000) {
+                showToast('录音时间太短，请至少说一句话');
+                if (this._voiceOverlay) { this._voiceOverlay.remove(); this._voiceOverlay = null; }
+                return;
+            }
+
+            await this._transcribeAndShow(textarea, blob, overlay);
+        };
+
+        recorder.start(1000);
+        this._startTimer(overlay);
+    },
+
+    _startTimer(overlay) {
+        const timerEl = overlay.querySelector('.voice-timer');
+        let seconds = 0;
+        this._voiceTimerInterval = setInterval(() => {
+            seconds++;
+            const m = String(Math.floor(seconds / 60)).padStart(2, '0');
+            const s = String(seconds % 60).padStart(2, '0');
+            if (timerEl) timerEl.textContent = `${m}:${s}`;
+            if (seconds >= this._voiceMaxDuration) {
+                showToast('已达到最大录音时长（5分钟），自动停止');
+                this._stopRecording(false);
+            }
+        }, 1000);
+    },
+
+    _clearTimer() {
+        if (this._voiceTimerInterval) {
+            clearInterval(this._voiceTimerInterval);
+            this._voiceTimerInterval = null;
+        }
+    },
+
+    _createVoiceOverlay(textarea) {
+        document.querySelectorAll('.voice-overlay').forEach(el => el.remove());
+
+        const barCount = 16;
+        const barsHtml = Array.from({ length: barCount }, () =>
+            '<span class="voice-bar"></span>'
+        ).join('');
+
+        const overlay = document.createElement('div');
+        overlay.className = 'voice-overlay';
+        overlay.innerHTML = `
+            <div class="voice-header">
+                <span class="voice-rec-dot"></span>
+                <span class="voice-status">录音中</span>
+                <div class="voice-bars">${barsHtml}</div>
+                <span class="voice-timer">00:00</span>
+                <button class="btn btn-secondary btn-xs voice-cancel-btn">取消</button>
+                <button class="btn btn-primary btn-xs voice-done-btn"><i class="fas fa-check"></i> 完成</button>
+            </div>
+        `;
+
+        textarea.parentNode.insertBefore(overlay, textarea.nextSibling);
+
+        overlay.querySelector('.voice-cancel-btn').onclick = () => this._stopRecording(true);
+        overlay.querySelector('.voice-done-btn').onclick = () => this._stopRecording(false);
+
+        this._startWaveform(overlay);
+        return overlay;
+    },
+
+    _startWaveform(overlay) {
+        const bars = overlay.querySelectorAll('.voice-bar');
+        if (!bars.length) return;
+
+        let analyser = null, dataArray = null;
+        if (this._voiceStream) {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const source = ctx.createMediaStreamSource(this._voiceStream);
+                analyser = ctx.createAnalyser();
+                analyser.fftSize = 64;
+                source.connect(analyser);
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+                this._voiceAudioCtx = ctx;
+            } catch (e) {}
+        }
+
+        const animate = () => {
+            if (!this._voiceActive) return;
+            if (analyser && dataArray) {
+                analyser.getByteFrequencyData(dataArray);
+                bars.forEach((bar, i) => {
+                    const val = dataArray[Math.floor(i * dataArray.length / bars.length)] || 0;
+                    bar.style.height = Math.max(3, (val / 255) * 20) + 'px';
+                });
+            } else {
+                bars.forEach(bar => {
+                    bar.style.height = (3 + Math.random() * 17) + 'px';
+                });
+            }
+            this._voiceWaveRAF = requestAnimationFrame(animate);
+        };
+        this._voiceWaveRAF = requestAnimationFrame(animate);
+    },
+
+    _stopRecording(cancelled) {
+        this._voiceActive = false;
+        this._voiceCancelled = cancelled;
+
+        if (this._voiceWaveRAF) { cancelAnimationFrame(this._voiceWaveRAF); this._voiceWaveRAF = null; }
+        if (this._voiceAudioCtx) { this._voiceAudioCtx.close().catch(() => {}); this._voiceAudioCtx = null; }
+
+        if (this._voiceButton) {
+            this._voiceButton.classList.remove('voice-active');
+            this._voiceButton.innerHTML = '<i class="fas fa-microphone"></i>';
+            this._voiceButton.title = '语音输入';
+        }
+
+        if (this._voiceRecorder && this._voiceRecorder.state !== 'inactive') {
+            this._voiceRecorder.stop();
+        }
+
+        if (cancelled && this._voiceStream) {
+            this._voiceStream.getTracks().forEach(t => t.stop());
+        }
+    },
+
+    async _transcribeAndShow(textarea, blob, overlay) {
+        overlay.classList.add('voice-transcribing-state');
+        const statusEl = overlay.querySelector('.voice-status');
+        if (statusEl) statusEl.textContent = '转写中…';
+
+        const extMap = { 'audio/mp4': 'mp4', 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/wav': 'wav' };
+        const ext = extMap[blob.type] || (blob.type.includes('mp4') ? 'mp4' : 'webm');
+        const formData = new FormData();
+        formData.append('audio', blob, `recording.${ext}`);
+
+        try {
+            const res = await api.ai.transcribe(formData);
+            if (!res) throw new Error('network');
+
+            const data = await res.json();
+
+            if (data.error) {
+                overlay.remove();
+                this._voiceOverlay = null;
+                if (data.type === 'config') {
+                    this._showVoiceConfigError(textarea, data.error);
+                } else {
+                    showToast(data.error);
+                }
+                return;
+            }
+
+            const text = (data.text || '').trim();
+            if (!text) {
+                overlay.remove();
+                this._voiceOverlay = null;
+                showToast('未识别到有效语音内容');
+                return;
+            }
+
+            overlay.remove();
+            this._voiceOverlay = null;
+            this._showVoiceResult(textarea, text, blob);
+        } catch (e) {
+            console.error('Transcribe error:', e);
+            overlay.remove();
+            this._voiceOverlay = null;
+            showToast('语音转写失败，请检查网络连接和 STT 服务配置');
+        }
+    },
+
+    _showVoiceConfigError(textarea, errorMsg) {
+        document.querySelectorAll('.voice-result-box').forEach(el => el.remove());
+        const box = document.createElement('div');
+        box.className = 'voice-result-box';
+        box.style.borderColor = '#fecaca';
+        box.innerHTML = `
+            <div class="voice-result-meta"><i class="fas fa-exclamation-triangle" style="color:#ef4444;"></i> 语音转写配置有误</div>
+            <div class="voice-result-content" style="color:#92400e;">${errorMsg.replace(/\n/g, '<br>')}</div>
+            <div class="voice-result-actions">
+                <button class="btn btn-secondary btn-xs voice-cfg-close">关闭</button>
+                <button class="btn btn-primary btn-xs voice-cfg-settings"><i class="fas fa-cog"></i> 前往设置</button>
+            </div>
+        `;
+        textarea.parentNode.insertBefore(box, textarea.nextSibling);
+        box.querySelector('.voice-cfg-close').onclick = () => box.remove();
+        box.querySelector('.voice-cfg-settings').onclick = () => { box.remove(); window.location.href = '/settings'; };
+    },
+
+    _showVoiceResult(textarea, rawText, blob) {
+        document.querySelectorAll('.voice-result-box').forEach(el => el.remove());
+
+        const resultBox = document.createElement('div');
+        resultBox.className = 'voice-result-box';
+        resultBox.innerHTML = `
+            <div class="voice-result-meta"><i class="fas fa-microphone"></i> 识别结果 · ${rawText.length} 字</div>
+            <div class="voice-result-content">${rawText.replace(/\n/g, '<br>')}</div>
+            <div class="voice-result-actions">
+                <button class="btn btn-secondary btn-xs voice-result-discard">放弃</button>
+                <button class="btn btn-secondary btn-xs voice-result-audio" title="将录音文件也嵌入笔记"><i class="fas fa-volume-up"></i> 附带录音</button>
+                <button class="btn btn-secondary btn-xs voice-result-insert"><i class="fas fa-plus"></i> 插入文字</button>
+                <button class="btn btn-primary btn-xs voice-result-organize"><i class="fas fa-magic"></i> AI 整理</button>
+            </div>
+        `;
+
+        textarea.parentNode.insertBefore(resultBox, textarea.nextSibling);
+
+        resultBox.querySelector('.voice-result-discard').onclick = () => resultBox.remove();
+
+        const insertText = (text) => {
+            const pos = textarea.selectionStart;
+            const before = textarea.value.substring(0, pos);
+            const after = textarea.value.substring(pos);
+            const insert = (before && !before.endsWith('\n') ? '\n' : '') + text;
+            textarea.value = before + insert + after;
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        };
+
+        resultBox.querySelector('.voice-result-insert').onclick = () => {
+            insertText(rawText);
+            showToast('已插入语音文字');
+            resultBox.remove();
+        };
+
+        resultBox.querySelector('.voice-result-audio').onclick = async (e) => {
+            const btn = e.currentTarget;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 上传中';
+            try {
+                const extMap = { 'audio/mp4': 'mp4', 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/wav': 'wav' };
+                const ext = extMap[blob.type] || (blob.type.includes('mp4') ? 'mp4' : 'webm');
+                const fd = new FormData();
+                fd.append('audio', blob, `recording.${ext}`);
+                const res = await api.ai.saveAudio(fd);
+                if (!res) throw new Error('上传失败');
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+                const audioTag = `\n<audio controls src="${data.url}"></audio>\n`;
+                insertText(audioTag + rawText);
+                showToast('已插入录音和文字');
+                resultBox.remove();
+            } catch (e) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-volume-up"></i> 附带录音';
+                showToast('录音上传失败：' + e.message);
+            }
+        };
+
+        resultBox.querySelector('.voice-result-organize').onclick = () => {
+            this._organizeVoiceWithAI(textarea, rawText, resultBox, blob);
+        };
+    },
+
+    async _organizeVoiceWithAI(textarea, rawText, resultBox, blob) {
+        const actionsDiv = resultBox.querySelector('.voice-result-actions');
+        const contentDiv = resultBox.querySelector('.voice-result-content');
+
+        actionsDiv.innerHTML = '<span class="ai-streaming-indicator"></span><span style="color:var(--slate-400);font-size:12px;margin-left:8px;">AI 整理中...</span>';
+
+        try {
+            const response = await api.ai.stream({
+                action: 'voice_organize',
+                content: rawText
+            });
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullText = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                fullText += decoder.decode(value);
+                if (!fullText.trim()) continue;
+
+                const cleanText = fullText.trim().replace(/\n{3,}/g, '\n\n');
+                if (typeof marked !== 'undefined') {
+                    contentDiv.innerHTML = sanitizeHtml(marked.parse(cleanText));
+                } else {
+                    contentDiv.textContent = cleanText;
+                }
+            }
+
+            const finalText = fullText.trim().replace(/\n{3,}/g, '\n\n');
+            actionsDiv.innerHTML = '';
+
+            const metaEl = resultBox.querySelector('.voice-result-meta');
+            if (metaEl) metaEl.innerHTML = `<i class="fas fa-magic"></i> AI 整理结果 · ${finalText.length} 字`;
+
+            const discardBtn = document.createElement('button');
+            discardBtn.className = 'btn btn-secondary btn-xs';
+            discardBtn.textContent = '放弃';
+            discardBtn.onclick = () => resultBox.remove();
+
+            const insertRawBtn = document.createElement('button');
+            insertRawBtn.className = 'btn btn-secondary btn-xs';
+            insertRawBtn.textContent = '插入原文';
+            insertRawBtn.onclick = () => {
+                const pos = textarea.selectionStart;
+                const before = textarea.value.substring(0, pos);
+                const after = textarea.value.substring(pos);
+                const insert = (before && !before.endsWith('\n') ? '\n' : '') + rawText;
+                textarea.value = before + insert + after;
+                textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                showToast('已插入原文');
+                resultBox.remove();
+            };
+
+            const insertContent = async (text, withAudio) => {
+                if (withAudio && blob) {
+                    const extMap = { 'audio/mp4': 'mp4', 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/wav': 'wav' };
+                    const ext = extMap[blob.type] || (blob.type.includes('mp4') ? 'mp4' : 'webm');
+                    const fd = new FormData();
+                    fd.append('audio', blob, `recording.${ext}`);
+                    try {
+                        const r = await api.ai.saveAudio(fd);
+                        if (r) {
+                            const d = await r.json();
+                            if (d.url) text = `<audio controls src="${d.url}"></audio>\n` + text;
+                        }
+                    } catch (e) {}
+                }
+                const pos = textarea.selectionStart;
+                const before = textarea.value.substring(0, pos);
+                const after = textarea.value.substring(pos);
+                textarea.value = before + (before && !before.endsWith('\n') ? '\n' : '') + text + after;
+                textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                resultBox.remove();
+            };
+
+            const applyBtn = document.createElement('button');
+            applyBtn.className = 'btn btn-primary btn-xs';
+            applyBtn.innerHTML = '<i class="fas fa-check"></i> 应用';
+            applyBtn.onclick = () => { insertContent(finalText, false); showToast('已应用整理结果'); };
+
+            const applyWithAudioBtn = document.createElement('button');
+            applyWithAudioBtn.className = 'btn btn-secondary btn-xs';
+            applyWithAudioBtn.innerHTML = '<i class="fas fa-volume-up"></i> 附带录音';
+            applyWithAudioBtn.title = '同时嵌入原始录音文件';
+            applyWithAudioBtn.onclick = async () => {
+                applyWithAudioBtn.disabled = true;
+                applyWithAudioBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                await insertContent(finalText, true);
+                showToast('已应用整理结果并附带录音');
+            };
+
+            actionsDiv.appendChild(discardBtn);
+            actionsDiv.appendChild(insertRawBtn);
+            if (blob) actionsDiv.appendChild(applyWithAudioBtn);
+            actionsDiv.appendChild(applyBtn);
+        } catch (e) {
+            console.error('Voice AI organize error:', e);
+            contentDiv.textContent = rawText;
+            actionsDiv.innerHTML = '';
+
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'btn btn-secondary btn-xs';
+            closeBtn.textContent = '关闭';
+            closeBtn.onclick = () => resultBox.remove();
+            actionsDiv.appendChild(closeBtn);
+
+            const insertBtn = document.createElement('button');
+            insertBtn.className = 'btn btn-primary btn-xs';
+            insertBtn.textContent = '插入原文';
+            insertBtn.onclick = () => {
+                const pos = textarea.selectionStart;
+                const before = textarea.value.substring(0, pos);
+                const after = textarea.value.substring(pos);
+                textarea.value = before + (before && !before.endsWith('\n') ? '\n' : '') + rawText + after;
+                textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                resultBox.remove();
+            };
+            actionsDiv.appendChild(insertBtn);
+
+            showToast('AI 整理失败，可直接插入原文');
+        }
     },
 
     // Markdown 快捷键

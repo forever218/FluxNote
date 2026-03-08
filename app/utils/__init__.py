@@ -4,8 +4,14 @@ import markdown
 import bleach
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+ALLOWED_VIDEO_EXTENSIONS = {'mp4', 'webm', 'ogg', 'mov'}
+ALLOWED_MEDIA_EXTENSIONS = {'mp3', 'wav', 'm4a', 'flac', 'aac'}
+ALLOWED_ATTACHMENT_EXTENSIONS = {'pdf', 'zip', 'rar', '7z', 'tar', 'gz',
+                                  'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+                                  'txt', 'csv', 'json', 'xml', 'md'}
+ALLOWED_UPLOAD_EXTENSIONS = (ALLOWED_EXTENSIONS | ALLOWED_MEDIA_EXTENSIONS
+                              | ALLOWED_VIDEO_EXTENSIONS | ALLOWED_ATTACHMENT_EXTENSIONS)
 
-# BLEACH 配置：允许的标签和属性
 ALLOWED_TAGS = [
     'p', 'br', 'hr',
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
@@ -16,11 +22,12 @@ ALLOWED_TAGS = [
     'table', 'thead', 'tbody', 'tr', 'th', 'td',
     'div', 'span',
     'sup', 'sub',
+    'audio', 'video', 'source', 'iframe',
 ]
 
 ALLOWED_ATTRIBUTES = {
     '*': ['class', 'id'],
-    'a': ['href', 'title', 'target', 'rel'],
+    'a': ['href', 'title', 'target', 'rel', 'download'],
     'img': ['src', 'alt', 'title', 'width', 'height'],
     'td': ['align'],
     'th': ['align'],
@@ -29,6 +36,11 @@ ALLOWED_ATTRIBUTES = {
     'pre': ['class'],
     'div': ['class'],
     'span': ['class'],
+    'audio': ['controls', 'src', 'preload', 'loop', 'muted'],
+    'video': ['controls', 'src', 'preload', 'loop', 'muted', 'poster', 'width', 'height', 'autoplay'],
+    'source': ['src', 'type'],
+    'iframe': ['src', 'width', 'height', 'frameborder', 'allowfullscreen', 'allow',
+               'referrerpolicy', 'loading', 'scrolling'],
 }
 
 ALLOWED_PROTOCOLS = ['http', 'https', 'mailto', 'ftp']

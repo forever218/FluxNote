@@ -275,7 +275,7 @@ async function loadNotes(reset = false) {
         let response;
 
         if (state.isTrashMode) {
-             response = await api.notes.trash(state.currentPage);
+             response = await api.notes.trash(state.currentPage, searchVal);
         } else if (searchVal) {
              response = await api.notes.search(searchVal, state.currentFilterTag, state.currentPage);
         } else {
@@ -349,6 +349,7 @@ async function loadTags() {
 function switchView(view) {
     const navAll = document.getElementById('navAllNotes');
     const navTrash = document.getElementById('navTrash');
+    const emptyTrashBtn = document.getElementById('emptyTrashBtn');
 
     if (view === 'trash') {
         setState('isTrashMode', true);
@@ -356,6 +357,7 @@ function switchView(view) {
         navAll?.classList.remove('active');
         document.getElementById('noteInputSection').style.display = 'none';
         document.querySelector('.header-left span:last-child').textContent = '回收站';
+        if (emptyTrashBtn) emptyTrashBtn.style.display = 'flex';
     } else {
         setState('isTrashMode', false);
         navAll?.classList.add('active');
@@ -364,6 +366,7 @@ function switchView(view) {
             document.getElementById('noteInputSection').style.display = 'block';
         }
         ui.updateHeaderDate();
+        if (emptyTrashBtn) emptyTrashBtn.style.display = 'none';
     }
 
     setState('currentFilterTag', '');

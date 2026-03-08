@@ -190,6 +190,21 @@ class ThemeSDK {
      */
     bindDeclarativeEvents() {
         document.addEventListener('click', (e) => {
+            // B站卡片点击 → 展开为 iframe 播放器
+            const biliCard = e.target.closest('.bilibili-card');
+            if (biliCard) {
+                const bvid = biliCard.dataset.bvid;
+                if (!bvid) return;
+                const src = bvid.startsWith('av')
+                    ? `https://player.bilibili.com/player.html?aid=${bvid.slice(2)}&high_quality=1&as_wide=1&autoplay=0`
+                    : `https://player.bilibili.com/player.html?bvid=${bvid}&high_quality=1&as_wide=1&autoplay=0`;
+                const wrapper = document.createElement('div');
+                wrapper.className = 'video-wrapper bilibili-wrapper';
+                wrapper.innerHTML = `<iframe src="${src}" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true" allow="autoplay; fullscreen; encrypted-media" referrerpolicy="no-referrer"></iframe>`;
+                biliCard.replaceWith(wrapper);
+                return;
+            }
+
             // 认证行为: data-auth-action="login|logout"
             const authBtn = e.target.closest('[data-auth-action]');
             if (authBtn) {

@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 from app.extensions import db
 from app.models import Note, User, Tag, NoteReference, NoteVersion
 from app.utils.cache import invalidate_stats_cache
-from app.utils import allowed_file, extract_title_and_links
+from app.utils import allowed_file, extract_title_and_links, ALLOWED_UPLOAD_EXTENSIONS
 from app.utils.error_handler import safe_error
 from werkzeug.utils import secure_filename
 
@@ -215,13 +215,31 @@ def upload_file():
     file = request.files['file']
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        # Generate unique filename to prevent overwrites
-        unique_filename = f"{uuid.uuid4().hex}_{filename}"
-        file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename))
-        return jsonify({'url': f'/uploads/{unique_filename}'}), 201
-    return jsonify({'error': 'File type not allowed'}), 400
+
+    ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+    if ext not in ALLOWED_UPLOAD_EXTENSIONS:
+        return jsonify({'error': f'不支持的文件类型: .{ext}'}), 400
+
+    filename = secure_filename(file.filename)
+    unique_filename = f"{uuid.uuid4().hex}_{filename}"
+    file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename))
+    url = f'/uploads/{unique_filename}'
+
+    from app.utils import ALLOWED_EXTENSIONS, ALLOWED_MEDIA_EXTENSIONS, ALLOWED_VIDEO_EXTENSIONS
+    if ext in ALLOWED_EXTENSIONS:
+        file_type = 'image'
+    elif ext in ALLOWED_VIDEO_EXTENSIONS:
+        file_type = 'video'
+    elif ext in ALLOWED_MEDIA_EXTENSIONS:
+        file_type = 'audio'
+    else:
+        file_type = 'file'
+
+    return jsonify({
+        'url': url,
+        'filename': filename,
+        'type': file_type,
+    }), 201
 
 @notes_bp.route('/uploads/<filename>')
 def uploaded_file(filename):
@@ -566,14 +584,24 @@ def permanent_delete_note(note_id):
 @notes_bp.route('/notes/trash', methods=['GET'])
 @login_required
 def get_trash_notes():
-    """Get notes in trash"""
+    """Get notes in trash, with optional keyword search"""
     try:
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
-        
+        keyword = request.args.get('q', '').strip()
+
         query = Note.query.filter_by(user_id=current_user.id, is_deleted=True)
-        
-        pagination = query.options(selectinload(Note.outgoing_references), selectinload(Note.incoming_references)).order_by(Note.deleted_at.desc()).paginate(
+
+        if keyword:
+            like = f'%{keyword}%'
+            query = query.filter(
+                db.or_(Note.content.ilike(like), Note.title.ilike(like))
+            )
+
+        pagination = query.options(
+            selectinload(Note.outgoing_references),
+            selectinload(Note.incoming_references)
+        ).order_by(Note.deleted_at.desc()).paginate(
             page=page, per_page=per_page, error_out=False
         )
 
@@ -586,6 +614,19 @@ def get_trash_notes():
         })
     except Exception as e:
         return jsonify(safe_error(e, '获取回收站笔记失败')), 500
+
+
+@notes_bp.route('/notes/trash', methods=['DELETE'])
+@login_required
+def empty_trash():
+    """Permanently delete all notes in trash for current user"""
+    try:
+        count = Note.query.filter_by(user_id=current_user.id, is_deleted=True).delete()
+        db.session.commit()
+        return jsonify({'deleted': count})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify(safe_error(e, '清空回收站失败')), 500
 
 @notes_bp.route('/notes/search', methods=['GET'])
 def search_notes():

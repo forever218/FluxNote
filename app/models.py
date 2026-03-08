@@ -6,48 +6,32 @@ import json
 import uuid
 import re
 import markdown
-import bleach
 import hashlib
 
 
-# BLEACH 配置：允许的标签和属性（用于Markdown渲染后的安全清洗）
-ALLOWED_TAGS = [
-    'p', 'br', 'hr',
-    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-    'strong', 'b', 'em', 'i', 'u', 's', 'del', 'ins',
-    'ul', 'ol', 'li',
-    'blockquote', 'pre', 'code',
-    'a', 'img',
-    'table', 'thead', 'tbody', 'tr', 'th', 'td',
-    'div', 'span',
-    'sup', 'sub',
-]
+from .utils import sanitize_html
 
-ALLOWED_ATTRIBUTES = {
-    '*': ['class', 'id'],
-    'a': ['href', 'title', 'target', 'rel'],
-    'img': ['src', 'alt', 'title', 'width', 'height'],
-    'td': ['align'],
-    'th': ['align'],
-    'ol': ['start'],
-    'code': ['class'],  # 代码高亮需要class
-    'pre': ['class'],
-    'div': ['class'],
-    'span': ['class'],
-}
-
-ALLOWED_PROTOCOLS = ['http', 'https', 'mailto', 'ftp']
+_BILI_SVG_SM = '<svg viewBox="0 0 24 24" width="14" height="14" fill="#fb7299" aria-hidden="true"><path d="M17.813 4.653h.854c1.51.054 2.769.578 3.773 1.574 1.004.995 1.524 2.249 1.56 3.76v7.36c-.036 1.51-.556 2.769-1.56 3.773s-2.262 1.524-3.773 1.56H5.333c-1.51-.036-2.769-.556-3.773-1.56S.036 18.858 0 17.347v-7.36c.036-1.511.556-2.765 1.56-3.76 1.004-.996 2.262-1.52 3.773-1.574h.774l-1.174-1.12a1.234 1.234 0 0 1-.373-.906c0-.356.124-.658.373-.907l.027-.027c.267-.249.573-.373.92-.373.347 0 .653.124.92.373L7.547 4.653h8.907l1.387-1.4a1.234 1.234 0 0 1 .92-.373c.347 0 .653.124.92.373.267.249.4.551.4.907a1.234 1.234 0 0 1-.4.906l-1.267 1.187zM2.547 17.347c-.014.627.204 1.16.654 1.6.45.44.987.663 1.613.667h13.44c.627-.004 1.16-.227 1.6-.667.44-.44.663-.973.667-1.6v-7.36c-.004-.627-.227-1.16-.667-1.6-.44-.44-.973-.663-1.6-.667H4.814c-.626.004-1.163.227-1.613.667-.45.44-.668.973-.654 1.6v7.36zM8 13.333a1.333 1.333 0 1 1-2.667 0 1.333 1.333 0 0 1 2.667 0zm10.667 0a1.333 1.333 0 1 1-2.667 0 1.333 1.333 0 0 1 2.667 0z"/></svg>'
+_BILI_SVG_LG = '<svg viewBox="0 0 24 24" width="36" height="36" fill="rgba(255,255,255,0.85)" aria-hidden="true"><path d="M17.813 4.653h.854c1.51.054 2.769.578 3.773 1.574 1.004.995 1.524 2.249 1.56 3.76v7.36c-.036 1.51-.556 2.769-1.56 3.773s-2.262 1.524-3.773 1.56H5.333c-1.51-.036-2.769-.556-3.773-1.56S.036 18.858 0 17.347v-7.36c.036-1.511.556-2.765 1.56-3.76 1.004-.996 2.262-1.52 3.773-1.574h.774l-1.174-1.12a1.234 1.234 0 0 1-.373-.906c0-.356.124-.658.373-.907l.027-.027c.267-.249.573-.373.92-.373.347 0 .653.124.92.373L7.547 4.653h8.907l1.387-1.4a1.234 1.234 0 0 1 .92-.373c.347 0 .653.124.92.373.267.249.4.551.4.907a1.234 1.234 0 0 1-.4.906l-1.267 1.187zM2.547 17.347c-.014.627.204 1.16.654 1.6.45.44.987.663 1.613.667h13.44c.627-.004 1.16-.227 1.6-.667.44-.44.663-.973.667-1.6v-7.36c-.004-.627-.227-1.16-.667-1.6-.44-.44-.973-.663-1.6-.667H4.814c-.626.004-1.163.227-1.613.667-.45.44-.668.973-.654 1.6v7.36zM8 13.333a1.333 1.333 0 1 1-2.667 0 1.333 1.333 0 0 1 2.667 0zm10.667 0a1.333 1.333 0 1 1-2.667 0 1.333 1.333 0 0 1 2.667 0z"/></svg>'
 
 
-def sanitize_html(html_content):
-    """清洗HTML内容，防止XSS攻击"""
-    return bleach.clean(
-        html_content,
-        tags=ALLOWED_TAGS,
-        attributes=ALLOWED_ATTRIBUTES,
-        protocols=ALLOWED_PROTOCOLS,
-        strip=False
+def _bilibili_card_html(bvid):
+    """生成 B站视频卡片 HTML（与前端 createBilibiliCardHtml 保持结构一致）"""
+    return (
+        f'<div class="bilibili-card" data-bvid="{bvid}" role="button" tabindex="0">'
+        f'<div class="bili-card-thumb">'
+        f'<div class="bili-thumb-placeholder">{_BILI_SVG_LG}</div>'
+        f'<div class="bili-play-btn"><i class="fas fa-play"></i></div>'
+        f'</div>'
+        f'<div class="bili-card-content">'
+        f'<div class="bili-card-brand-row">{_BILI_SVG_SM}<span class="bili-brand-name">bilibili</span></div>'
+        f'<div class="bili-card-title" data-loading="true">加载中…</div>'
+        f'<div class="bili-card-meta"><span class="bili-card-bvid">{bvid}</span></div>'
+        f'</div>'
+        f'<div class="bili-card-arrow"><i class="fas fa-chevron-right"></i></div>'
+        f'</div>'
     )
+
 
 # Association Table for Many-to-Many relationship between Note and Tag
 note_tags = db.Table('note_tags',
@@ -253,6 +237,14 @@ class Note(db.Model):
         return text
 
     @property
+    def display_title(self):
+        """返回适合显示的标题，过滤掉纯符号/单字符无意义标题"""
+        t = (self.title or '').strip()
+        if not t or not re.search(r'[\w\u4e00-\u9fff]', t):
+            return ''
+        return t
+
+    @property
     def reading_time(self):
         """估算阅读时间（分钟）"""
         if not self.content:
@@ -300,17 +292,36 @@ class Note(db.Model):
             # 处理英文引号 **"content"**
             text = re.sub(r'\*\*"([^"]+)"([^\*]*?)\*\*', r'<strong>"\1"\2</strong>', text)
             # 处理中文引号 **"content"** (U+201C, U+201D)
-            text = re.sub(r'\*\*\u201C([^\u201D]+)\u201D([^\*]*?)\*\*', r'<strong>\u201C\1\u201D\2</strong>', text)
+            text = re.sub('\\*\\*\u201C([^\u201D]+)\u201D([^\\*]*?)\\*\\*', '<strong>\u201C\\1\u201D\\2</strong>', text)
             # 处理 **「content」**
             text = re.sub(r'\*\*「([^」]+)」([^\*]*?)\*\*', r'<strong>「\1」\2</strong>', text)
             # 处理 **『content』**
             text = re.sub(r'\*\*『([^』]+)』([^\*]*?)\*\*', r'<strong>『\1』\2</strong>', text)
 
-            # 渲染Markdown
             html = markdown.markdown(text, extensions=['fenced_code', 'tables', 'toc'])
-            # XSS清洗
+
+            _audio_exts = re.compile(r'\.(mp3|wav|m4a|flac|aac)$', re.I)
+            _video_exts = re.compile(r'\.(mp4|webm|ogg|mov)$', re.I)
+            def _media_replace(m):
+                href = m.group(1)
+                if _audio_exts.search(href):
+                    return f'<audio controls preload="metadata" src="{href}"></audio>'
+                if _video_exts.search(href):
+                    return f'<div class="video-wrapper"><video controls preload="metadata" src="{href}"></video></div>'
+                return m.group(0)
+            html = re.sub(r'<a\s+href="([^"]+)"[^>]*>.*?</a>', _media_replace, html)
+
             html = sanitize_html(html)
-        except:
+
+            html = re.sub(
+                r'<a\s+href="https?://(?:www\.)?bilibili\.com/video/(BV[\w]+)[^"]*"[^>]*>.*?</a>',
+                lambda m: _bilibili_card_html(m.group(1)), html)
+            html = re.sub(
+                r'<a\s+href="https?://(?:www\.)?bilibili\.com/video/av(\d+)[^"]*"[^>]*>.*?</a>',
+                lambda m: _bilibili_card_html(f'av{m.group(1)}'), html)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
             html = text.replace('\n', '<br>')
 
         return html

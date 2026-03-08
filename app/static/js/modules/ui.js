@@ -1,7 +1,7 @@
 import { api } from './api.js';
 import { state } from './state.js';
 import { offlineStore } from './offline.js';
-import { formatDate, escapeHtml, parseWikiLinks, showToast } from './utils.js';
+import { formatDate, escapeHtml, parseWikiLinks, showToast, sanitizeHtml } from './utils.js';
 import { editor } from './editor.js';
 import { loadMermaidIfNeeded } from '/static/js/markdown-renderer.js';
 
@@ -46,6 +46,9 @@ export const ui = {
             fragment.appendChild(card);
         });
         list.appendChild(fragment);
+
+        // Load bilibili card metadata (title, cover)
+        this._loadBilibiliCards(list);
 
         // Render Mermaid/Mindmap first to replace code blocks with divs
         this.renderMermaid(list);
@@ -161,13 +164,19 @@ export const ui = {
         const searchVal = document.getElementById('searchInput')?.value.trim() || '';
 
         try {
+            // Pre-process: convert bilibili markdown links to card HTML blocks
+            const preprocessed = this._preprocessBilibiliLinks(parseWikiLinks(rawContent));
+
+            let html;
             if (typeof marked !== 'undefined') {
-                const html = marked.parse(parseWikiLinks(rawContent));
-                content = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(html) : html;
+                html = marked.parse(preprocessed);
             } else {
-                const html = parseWikiLinks(rawContent).replace(/\n/g, '<br>');
-                content = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(html) : html;
+                html = preprocessed.replace(/\n/g, '<br>');
             }
+
+            // Post-process: also catch any bilibili <a> tags that slipped through the renderer
+            html = this._postprocessBilibiliLinks(html);
+            content = sanitizeHtml(html);
 
             // Highlight Search Keywords (Safer implementation)
             if (searchVal && !state.isTrashMode) {
@@ -214,9 +223,11 @@ export const ui = {
         card.innerHTML = `
             <div class="note-header">
                 <span>${formatDate(note.created_at)}</span>
-                ${note.is_public ? '<i class="fas fa-globe" title="公开"></i>' : '<i class="fas fa-lock" title="私密"></i>'}
-                ${isOpenedCapsule ? '<span title="已拆开的时光胶囊" style="color:#f39c12; font-size:12px; display:inline-flex; align-items:center; gap:3px;"><i class="fas fa-hourglass-end"></i> 胶囊</span>' : ''}
-                ${note.is_offline_draft ? '<span class="offline-badge" title="待同步"><i class="fas fa-cloud-upload-alt"></i></span>' : ''}
+                <span class="note-header-right">
+                    ${note.is_public ? '<i class="fas fa-globe" title="公开"></i>' : '<i class="fas fa-lock" title="私密"></i>'}
+                    ${isOpenedCapsule ? '<span title="已拆开的时光胶囊" style="color:#f39c12; font-size:12px; display:inline-flex; align-items:center; gap:3px;"><i class="fas fa-hourglass-end"></i> 胶囊</span>' : ''}
+                    ${note.is_offline_draft ? '<span class="offline-badge" title="待同步"><i class="fas fa-cloud-upload-alt"></i></span>' : ''}
+                </span>
             </div>
             <div class="note-content markdown-body" style="${isOwner ? 'cursor: pointer;' : ''}" ${isOwner && !note.is_offline_draft ? `ondblclick="window.dispatchEvent(new CustomEvent('note:edit', { detail: '${note.id}' }))"` : ''}>${content}</div>
 
@@ -228,7 +239,7 @@ export const ui = {
                 ${isOwner ? (state.isTrashMode ? `
                 <div class="note-actions">
                     <span class="note-action restore" data-action="restore" data-id="${note.id}" title="恢复"><i class="fas fa-undo"></i></span>
-                    <span class="note-action delete-forever" data-action="permanent-delete" data-id="${note.id}" title="彻底删除" style="color:#ef4444;"><i class="fas fa-ban"></i></span>
+                    <span class="note-action delete-forever" data-action="permanent-delete" data-id="${note.id}" title="彻底删除"><i class="fas fa-trash-alt"></i></span>
                 </div>
                 ` : `
                 <div class="note-actions">
@@ -278,6 +289,105 @@ export const ui = {
         
         this.renderMermaid(newCard);
         this.addCopyButtons();
+        this._loadBilibiliCards(newCard);
+    },
+
+    // bilibili 官方 TV 脸 SVG logo（来自 simple-icons）
+    _BILI_LOGO_SVG: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.813 4.653h.854c1.51.054 2.769.578 3.773 1.574 1.004.995 1.524 2.249 1.56 3.76v7.36c-.036 1.51-.556 2.769-1.56 3.773s-2.262 1.524-3.773 1.56H5.333c-1.51-.036-2.769-.556-3.773-1.56S.036 18.858 0 17.347v-7.36c.036-1.511.556-2.765 1.56-3.76 1.004-.996 2.262-1.52 3.773-1.574h.774l-1.174-1.12a1.234 1.234 0 0 1-.373-.906c0-.356.124-.658.373-.907l.027-.027c.267-.249.573-.373.92-.373.347 0 .653.124.92.373L7.547 4.653h8.907l1.387-1.4a1.234 1.234 0 0 1 .92-.373c.347 0 .653.124.92.373.267.249.4.551.4.907a1.234 1.234 0 0 1-.4.906l-1.267 1.187zM2.547 17.347c-.014.627.204 1.16.654 1.6.45.44.987.663 1.613.667h13.44c.627-.004 1.16-.227 1.6-.667.44-.44.663-.973.667-1.6v-7.36c-.004-.627-.227-1.16-.667-1.6-.44-.44-.973-.663-1.6-.667H4.814c-.626.004-1.163.227-1.613.667-.45.44-.668.973-.654 1.6v7.36zM8 13.333a1.333 1.333 0 1 1-2.667 0 1.333 1.333 0 0 1 2.667 0zm10.667 0a1.333 1.333 0 1 1-2.667 0 1.333 1.333 0 0 1 2.667 0z"/></svg>`,
+
+    _createBilibiliCardHtml(bvid) {
+        const logoSm = `<svg viewBox="0 0 24 24" width="14" height="14" fill="#fb7299" aria-hidden="true"><path d="M17.813 4.653h.854c1.51.054 2.769.578 3.773 1.574 1.004.995 1.524 2.249 1.56 3.76v7.36c-.036 1.51-.556 2.769-1.56 3.773s-2.262 1.524-3.773 1.56H5.333c-1.51-.036-2.769-.556-3.773-1.56S.036 18.858 0 17.347v-7.36c.036-1.511.556-2.765 1.56-3.76 1.004-.996 2.262-1.52 3.773-1.574h.774l-1.174-1.12a1.234 1.234 0 0 1-.373-.906c0-.356.124-.658.373-.907l.027-.027c.267-.249.573-.373.92-.373.347 0 .653.124.92.373L7.547 4.653h8.907l1.387-1.4a1.234 1.234 0 0 1 .92-.373c.347 0 .653.124.92.373.267.249.4.551.4.907a1.234 1.234 0 0 1-.4.906l-1.267 1.187zM2.547 17.347c-.014.627.204 1.16.654 1.6.45.44.987.663 1.613.667h13.44c.627-.004 1.16-.227 1.6-.667.44-.44.663-.973.667-1.6v-7.36c-.004-.627-.227-1.16-.667-1.6-.44-.44-.973-.663-1.6-.667H4.814c-.626.004-1.163.227-1.613.667-.45.44-.668.973-.654 1.6v7.36zM8 13.333a1.333 1.333 0 1 1-2.667 0 1.333 1.333 0 0 1 2.667 0zm10.667 0a1.333 1.333 0 1 1-2.667 0 1.333 1.333 0 0 1 2.667 0z"/></svg>`;
+        const logoLg = `<svg viewBox="0 0 24 24" width="36" height="36" fill="rgba(255,255,255,0.85)" aria-hidden="true"><path d="M17.813 4.653h.854c1.51.054 2.769.578 3.773 1.574 1.004.995 1.524 2.249 1.56 3.76v7.36c-.036 1.51-.556 2.769-1.56 3.773s-2.262 1.524-3.773 1.56H5.333c-1.51-.036-2.769-.556-3.773-1.56S.036 18.858 0 17.347v-7.36c.036-1.511.556-2.765 1.56-3.76 1.004-.996 2.262-1.52 3.773-1.574h.774l-1.174-1.12a1.234 1.234 0 0 1-.373-.906c0-.356.124-.658.373-.907l.027-.027c.267-.249.573-.373.92-.373.347 0 .653.124.92.373L7.547 4.653h8.907l1.387-1.4a1.234 1.234 0 0 1 .92-.373c.347 0 .653.124.92.373.267.249.4.551.4.907a1.234 1.234 0 0 1-.4.906l-1.267 1.187zM2.547 17.347c-.014.627.204 1.16.654 1.6.45.44.987.663 1.613.667h13.44c.627-.004 1.16-.227 1.6-.667.44-.44.663-.973.667-1.6v-7.36c-.004-.627-.227-1.16-.667-1.6-.44-.44-.973-.663-1.6-.667H4.814c-.626.004-1.163.227-1.613.667-.45.44-.668.973-.654 1.6v7.36zM8 13.333a1.333 1.333 0 1 1-2.667 0 1.333 1.333 0 0 1 2.667 0zm10.667 0a1.333 1.333 0 1 1-2.667 0 1.333 1.333 0 0 1 2.667 0z"/></svg>`;
+
+        return `<div class="bilibili-card" data-bvid="${bvid}" role="button" tabindex="0">` +
+            `<div class="bili-card-thumb">` +
+                `<div class="bili-thumb-placeholder">${logoLg}</div>` +
+                `<div class="bili-play-btn"><i class="fas fa-play"></i></div>` +
+            `</div>` +
+            `<div class="bili-card-content">` +
+                `<div class="bili-card-brand-row">${logoSm}<span class="bili-brand-name">bilibili</span></div>` +
+                `<div class="bili-card-title" data-loading="true">加载中…</div>` +
+                `<div class="bili-card-meta">` +
+                    `<span class="bili-card-bvid">${bvid}</span>` +
+                `</div>` +
+            `</div>` +
+            `<div class="bili-card-arrow"><i class="fas fa-chevron-right"></i></div>` +
+        `</div>`;
+    },
+
+    _loadBilibiliCards(container) {
+        container.querySelectorAll('.bilibili-card[data-bvid]:not([data-loaded])').forEach(card => {
+            const bvid = card.dataset.bvid;
+            if (!bvid) return;
+            card.dataset.loaded = 'loading';
+
+            fetch(`/api/bilibili/info?bvid=${encodeURIComponent(bvid)}`)
+                .then(r => r.ok ? r.json() : null)
+                .then(data => {
+                    if (!data || data.error) { card.dataset.loaded = 'error'; return; }
+
+                    const titleEl = card.querySelector('.bili-card-title');
+                    if (titleEl && data.title) {
+                        titleEl.textContent = data.title;
+                        titleEl.removeAttribute('data-loading');
+                        card.title = data.title;
+                    }
+
+                    const metaEl = card.querySelector('.bili-card-meta');
+                    if (metaEl) {
+                        const bvidSpan = metaEl.querySelector('.bili-card-bvid');
+                        if (bvidSpan) bvidSpan.textContent = bvid;
+                        if (data.owner && !metaEl.querySelector('.bili-card-owner')) {
+                            const ownerSpan = document.createElement('span');
+                            ownerSpan.className = 'bili-card-owner';
+                            ownerSpan.textContent = data.owner;
+                            metaEl.appendChild(ownerSpan);
+                        }
+                    }
+
+                    if (data.cover) {
+                        const thumbEl = card.querySelector('.bili-card-thumb');
+                        if (thumbEl) {
+                            const img = new Image();
+                            img.loading = 'lazy';
+                            img.referrerPolicy = 'no-referrer';
+                            img.alt = data.title || bvid;
+                            img.onerror = () => img.remove();
+                            img.src = data.cover;
+                            thumbEl.insertBefore(img, thumbEl.firstChild);
+                        }
+                    }
+
+                    card.dataset.loaded = 'true';
+                })
+                .catch(() => {
+                    const titleEl = card.querySelector('.bili-card-title');
+                    if (titleEl) { titleEl.textContent = bvid; titleEl.removeAttribute('data-loading'); }
+                    card.dataset.loaded = 'error';
+                });
+        });
+    },
+
+    _preprocessBilibiliLinks(content) {
+        // Match [any-text](bilibili-url) markdown link patterns
+        let result = content.replace(
+            /\[([^\]]*)\]\((https?:\/\/(?:www\.)?bilibili\.com\/video\/(BV[\w]+)[^)]*)\)/gi,
+            (match, text, url, bvid) => `\n${this._createBilibiliCardHtml(bvid)}\n`
+        );
+        // Also match bare bilibili URLs on their own line (no markdown link wrapping)
+        result = result.replace(
+            /(?<!\()(https?:\/\/(?:www\.)?bilibili\.com\/video\/(BV[\w]+)[^\s)]*)/gi,
+            (match, url, bvid) => this._createBilibiliCardHtml(bvid)
+        );
+        return result;
+    },
+
+    _postprocessBilibiliLinks(html) {
+        // Catch any bilibili <a href> tags rendered by marked (fallback)
+        return html.replace(
+            /<a\s+href="https?:\/\/(?:www\.)?bilibili\.com\/video\/(BV[\w]+)[^"]*"[^>]*>(?:[^<]|<(?!\/a>))*<\/a>/gi,
+            (match, bvid) => this._createBilibiliCardHtml(bvid)
+        );
     },
 
     addCopyButtons() {
@@ -480,6 +590,7 @@ export const ui = {
             editor.setupAutoHeight(textarea);
             editor.setupAITools(textarea);
             editor.setupCapsuleTool(textarea);
+            editor.setupVoiceInput(textarea);
 
             // 如果原本就是时光胶囊，初始化状态
             if (note.is_capsule) {
