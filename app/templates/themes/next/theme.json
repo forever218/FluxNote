@@ -7,5 +7,28 @@
     "value": "linear-gradient(135deg, #0e83cd 0%, #4facfe 100%)"
   },
   "primary_color": "#0e83cd",
-  "is_writer": false
+  "is_writer": false,
+  "settings": [
+    {
+      "group": "style",
+      "label": "样式设置",
+      "fields": [
+        {
+          "name": "primary_color",
+          "label": "主题色",
+          "type": "color",
+          "default": "#0e83cd",
+          "description": "主题的主要颜色，影响链接、按钮等元素"
+        },
+        {
+          "name": "custom_css",
+          "label": "自定义CSS",
+          "type": "code",
+          "default": "",
+          "placeholder": "/* 在此输入自定义CSS代码 */",
+          "description": "添加自定义CSS以覆盖主题默认样式"
+        }
+      ]
+    }
+  ]
 }
