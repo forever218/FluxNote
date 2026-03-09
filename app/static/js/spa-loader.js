@@ -6,6 +6,7 @@ class SPALoader {
     constructor() {
         this.progressBar = null;
         this.isLoading = false;
+        this.abortController = null;
         this.cache = new Map();
         this.cacheEnabled = true;
         this.cacheTTL = 30000; // 缓存30秒
@@ -150,9 +151,10 @@ class SPALoader {
 
         // 处理浏览器前进/后退
         window.addEventListener('popstate', (e) => {
-            if (e.state && e.state.url) {
-                this.loadPage(e.state.url, false);
-            }
+            const state = e.state;
+            const url = state?.url || window.location.href;
+            this._pendingScrollRestore = state ? { x: state.scrollX || 0, y: state.scrollY || 0 } : null;
+            this.loadPage(url, false);
         });
 
         // 初始状态
@@ -167,21 +169,51 @@ class SPALoader {
     }
 
     navigate(url) {
-        if (this.isLoading) return;
+        // 取消进行中的请求，允许新导航覆盖
+        if (this.isLoading) {
+            this.abortCurrentRequest();
+        }
+
+        // 保存当前滚动位置到 history state
+        this.saveScrollPosition();
 
         // 检查缓存
         const cached = this.getFromCache(url);
         if (cached) {
-            this.applyContent(cached, url, true);
+            this.isLoading = true;
+            try {
+                this.applyContent(cached, url, true);
+            } finally {
+                this.isLoading = false;
+            }
             return;
         }
 
         this.loadPage(url, true);
     }
 
+    abortCurrentRequest() {
+        if (this.abortController) {
+            this.abortController.abort();
+            this.abortController = null;
+        }
+        this.isLoading = false;
+        this.hideProgress();
+    }
+
+    saveScrollPosition() {
+        const state = history.state || {};
+        state.scrollX = window.scrollX;
+        state.scrollY = window.scrollY;
+        history.replaceState(state, '');
+    }
+
     async loadPage(url, pushState = true) {
         if (this.isLoading) return;
         this.isLoading = true;
+
+        this.abortController = new AbortController();
+        const { signal } = this.abortController;
 
         this.showProgress();
 
@@ -190,7 +222,8 @@ class SPALoader {
                 headers: {
                     'X-Requested-With': 'SPA-Loader',
                     'Accept': 'text/html'
-                }
+                },
+                signal
             });
 
             if (!response.ok) {
@@ -237,10 +270,11 @@ class SPALoader {
             this.applyContent(html, url, pushState);
 
         } catch (error) {
+            if (error.name === 'AbortError') return;
             console.error('SPA Loader error:', error);
-            // 出错时降级为普通跳转
             window.location.href = url;
         } finally {
+            this.abortController = null;
             this.isLoading = false;
             this.hideProgress();
         }
@@ -290,9 +324,15 @@ class SPALoader {
             history.pushState({ url }, '', url);
         }
 
-        // 滚动到顶部
-        window.scrollTo(0, 0);
-        if (currentMain) currentMain.scrollTo(0, 0);
+        // 后退/前进时恢复滚动位置，否则滚动到顶部
+        if (this._pendingScrollRestore) {
+            const pos = this._pendingScrollRestore;
+            this._pendingScrollRestore = null;
+            window.scrollTo(pos.x, pos.y);
+        } else {
+            window.scrollTo(0, 0);
+            if (currentMain) currentMain.scrollTo(0, 0);
+        }
 
         // 执行页面内联脚本 (在主内容区域内)
         this.executeScripts(newMain);
@@ -315,6 +355,7 @@ class SPALoader {
      * 执行新页面 body 末尾的脚本（处理 {% block scripts %} 的内容）
      */
     executeBodyScripts(newDoc) {
+        if (!newDoc.body) return;
         const bodyScripts = newDoc.body.querySelectorAll('script');
         const mainContentSelectors = this.selectors.content;
         const baseUrl = window.location.origin;

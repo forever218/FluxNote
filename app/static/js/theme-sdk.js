@@ -99,11 +99,15 @@ class ThemeSDK {
     async handlePageLoad() {
         const container = document.querySelector(this.options.contentSelector);
         if (container) {
-            // hljs 必须存在，mermaid 改为懒加载（在 initThemePlugins 内部按需加载）
             if (typeof hljs === 'undefined') {
-                setTimeout(() => this.handlePageLoad(), 100);
-                return;
+                this._hljsRetries = (this._hljsRetries || 0) + 1;
+                if (this._hljsRetries <= 30) {
+                    setTimeout(() => this.handlePageLoad(), 100);
+                    return;
+                }
+                console.warn('ThemeSDK: hljs failed to load after 3s, skipping highlight');
             }
+            this._hljsRetries = 0;
             await initThemePlugins(container);
         }
 
@@ -196,13 +200,20 @@ class ThemeSDK {
             const biliCard = e.target.closest('.bilibili-card');
             if (biliCard) {
                 const bvid = biliCard.dataset.bvid;
-                if (!bvid) return;
+                if (!bvid || !/^(av\d+|BV[\w]+)$/.test(bvid)) return;
                 const src = bvid.startsWith('av')
-                    ? `https://player.bilibili.com/player.html?aid=${bvid.slice(2)}&high_quality=1&as_wide=1&autoplay=0`
-                    : `https://player.bilibili.com/player.html?bvid=${bvid}&high_quality=1&as_wide=1&autoplay=0`;
+                    ? `https://player.bilibili.com/player.html?aid=${encodeURIComponent(bvid.slice(2))}&high_quality=1&as_wide=1&autoplay=0`
+                    : `https://player.bilibili.com/player.html?bvid=${encodeURIComponent(bvid)}&high_quality=1&as_wide=1&autoplay=0`;
                 const wrapper = document.createElement('div');
                 wrapper.className = 'video-wrapper bilibili-wrapper';
-                wrapper.innerHTML = `<iframe src="${src}" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true" allow="autoplay; fullscreen; encrypted-media" referrerpolicy="no-referrer"></iframe>`;
+                const iframe = document.createElement('iframe');
+                iframe.src = src;
+                iframe.scrolling = 'no';
+                iframe.frameBorder = 'no';
+                iframe.allowFullscreen = true;
+                iframe.allow = 'autoplay; fullscreen; encrypted-media';
+                iframe.referrerPolicy = 'no-referrer';
+                wrapper.appendChild(iframe);
                 biliCard.replaceWith(wrapper);
                 return;
             }
@@ -214,6 +225,7 @@ class ThemeSDK {
                 const action = authBtn.dataset.authAction;
                 if (action === 'login') auth.smartLogin();
                 if (action === 'logout') auth.logout();
+                return;
             }
 
             // 类切换行为: data-toggle-class="open" data-target="#menu"
@@ -224,9 +236,8 @@ class ThemeSDK {
                 const toggleClass = toggleBtn.dataset.class || 'open';
                 const target = targetSelector === 'body' ? document.body : document.querySelector(targetSelector);
                 target?.classList.toggle(toggleClass);
-
-                // 侧边栏收起/展开时，更新浮动按钮状态
                 this.updateFloatingMenuBtn();
+                return;
             }
 
             // 移动端菜单按钮: #mobileMenuBtn
@@ -234,6 +245,7 @@ class ThemeSDK {
             if (mobileMenuBtn) {
                 e.preventDefault();
                 this.toggleMobileSidebar();
+                return;
             }
 
             // 移动端侧边栏关闭按钮
@@ -241,6 +253,7 @@ class ThemeSDK {
             if (mobileCloseBtn) {
                 e.preventDefault();
                 this.closeMobileSidebar();
+                return;
             }
         });
 
@@ -309,11 +322,7 @@ class ThemeSDK {
      * 创建浮动展开按钮（侧边栏收起后显示）
      */
     createFloatingMenuBtn() {
-        // 只有存在侧边栏的页面才创建
-        const sidebar = document.querySelector('#sidebar');
-        if (!sidebar) return;
-
-        // 检查是否已存在
+        if (!document.querySelector('#sidebar')) return;
         if (document.querySelector('.floating-menu-btn')) return;
 
         const btn = document.createElement('button');
@@ -322,6 +331,7 @@ class ThemeSDK {
         btn.style.display = 'none';
 
         btn.addEventListener('click', () => {
+            const sidebar = document.querySelector('#sidebar');
             if (sidebar) {
                 sidebar.classList.remove('collapsed');
                 this.updateFloatingMenuBtn();
@@ -329,8 +339,6 @@ class ThemeSDK {
         });
 
         document.body.appendChild(btn);
-
-        // 初始化状态
         this.updateFloatingMenuBtn();
     }
 

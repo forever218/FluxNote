@@ -8,8 +8,10 @@ class AuthModule {
     constructor() {
         this.modal = null;
         this.isInitialized = false;
+        this.isSubmitting = false;
         this.onLoginSuccess = null;
         this.canRegister = true; // 默认允许注册，后续会从API获取
+        this._toastTimer = null;
     }
 
     /**
@@ -23,6 +25,7 @@ class AuthModule {
             return this.canRegister;
         } catch (e) {
             console.error('Failed to check register status:', e);
+            this.canRegister = false;
             return false;
         }
     }
@@ -191,6 +194,8 @@ class AuthModule {
      * 处理登录/注册提交
      */
     async handleSubmit() {
+        if (this.isSubmitting) return;
+
         const mode = this.modal.dataset.mode;
         const username = document.getElementById('authUsername').value.trim();
         const password = document.getElementById('authPassword').value;
@@ -200,7 +205,6 @@ class AuthModule {
             return;
         }
 
-        // 如果是注册模式，再次检查是否允许注册
         if (mode === 'register') {
             await this.checkRegisterStatus();
             if (!this.canRegister) {
@@ -210,6 +214,10 @@ class AuthModule {
         }
 
         const endpoint = mode === 'login' ? '/api/auth/login' : '/api/auth/register';
+        const submitBtn = document.getElementById('authSubmitBtn');
+
+        this.isSubmitting = true;
+        if (submitBtn) submitBtn.disabled = true;
 
         try {
             const response = await fetch(endpoint, {
@@ -229,6 +237,9 @@ class AuthModule {
             }
         } catch (e) {
             this.showToast('网络错误');
+        } finally {
+            this.isSubmitting = false;
+            if (submitBtn) submitBtn.disabled = false;
         }
     }
 
@@ -236,10 +247,14 @@ class AuthModule {
      * WebAuthn 生物识别登录
      */
     async loginWithWebAuthn() {
+        if (!window.PublicKeyCredential) {
+            this.showToast('当前浏览器不支持生物识别登录');
+            return false;
+        }
+
         const username = document.getElementById('authUsername')?.value?.trim() || '';
 
         try {
-            // 开始认证
             const resp = await fetch('/api/auth/webauthn/login/begin', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -331,7 +346,6 @@ class AuthModule {
      * 显示提示
      */
     showToast(message) {
-        // 检查是否已有 toast
         let toast = document.getElementById('authToast');
         if (!toast) {
             toast = document.createElement('div');
@@ -340,9 +354,14 @@ class AuthModule {
             document.body.appendChild(toast);
         }
 
+        if (this._toastTimer) clearTimeout(this._toastTimer);
+
         toast.textContent = message;
         toast.className = 'toast show';
-        setTimeout(() => { toast.className = 'toast'; }, 3000);
+        this._toastTimer = setTimeout(() => {
+            toast.className = 'toast';
+            this._toastTimer = null;
+        }, 3000);
     }
 }
 
