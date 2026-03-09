@@ -740,6 +740,65 @@
             font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
             word-break: break-all;
         }
+        .update-cached-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 10px;
+            padding: 5px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+            border: 1px solid;
+        }
+        .update-cached-badge.verified {
+            background: #f0fdf4;
+            color: #16a34a;
+            border-color: #bbf7d0;
+        }
+        .update-cached-badge.unverified {
+            background: #fffbeb;
+            color: #d97706;
+            border-color: #fde68a;
+        }
+        .update-countdown-bar {
+            display: none;
+            margin-top: 14px;
+            padding: 12px 14px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #eff6ff, #f8fbff);
+            border: 1px solid #bfdbfe;
+        }
+        .update-countdown-bar .countdown-text {
+            font-size: 13px;
+            color: var(--slate-700);
+            margin-bottom: 8px;
+        }
+        .update-countdown-bar .countdown-track {
+            background: var(--slate-200);
+            border-radius: 999px;
+            height: 6px;
+            overflow: hidden;
+        }
+        .update-countdown-bar .countdown-fill {
+            background: linear-gradient(90deg, #3B82F6, #10B981);
+            height: 100%;
+            width: 100%;
+            border-radius: 999px;
+            transition: width 1s linear;
+        }
+        .update-countdown-bar .countdown-actions {
+            margin-top: 10px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .btn-action-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
         .update-progress-card {
             display: none;
             border: 1px solid #bfdbfe;
@@ -1673,11 +1732,37 @@
                                 <i class="fas fa-shield-alt" style="margin-right:4px; color:#16a34a;"></i>
                                 <span id="updateMd5Text"></span>
                             </div>
+                            <div id="updateCachedBadge" class="update-cached-badge verified" style="display:none;">
+                                <i class="fas fa-check-circle"></i>
+                                <span id="updateCachedBadgeText">已下载 (MD5 校验通过)</span>
+                            </div>
+                            <div id="updateCountdownBar" class="update-countdown-bar">
+                                <div class="countdown-text">
+                                    <i class="fas fa-shield-alt" style="color:#16a34a; margin-right:4px;"></i>
+                                    下载完成，MD5 校验通过！将在 <strong id="countdownSec">5</strong> 秒后自动安装...
+                                </div>
+                                <div class="countdown-track">
+                                    <div id="countdownFill" class="countdown-fill"></div>
+                                </div>
+                                <div class="countdown-actions">
+                                    <button class="btn btn-secondary" onclick="cancelAutoInstall()">
+                                        <i class="fas fa-times" style="color:#ef4444;"></i> 取消自动安装
+                                    </button>
+                                </div>
+                            </div>
                             <div class="update-status-actions">
-                                <button class="btn btn-secondary" id="applyUpdateBtn" onclick="applyUpdate()">
-                                    <i class="fas fa-download" style="color: var(--primary);"></i> 下载并安装更新
-                                </button>
-                                <a id="updateHtmlUrl" href="#" target="_blank" style="font-size:13px; color:var(--primary); text-decoration:none;">
+                                <div class="btn-action-group" id="updateActionGroup">
+                                    <button class="btn btn-primary" id="downloadAndInstallBtn" onclick="downloadAndInstall()">
+                                        <i class="fas fa-bolt"></i> 下载并更新
+                                    </button>
+                                    <button class="btn btn-secondary" id="downloadOnlyBtn" onclick="downloadOnly()">
+                                        <i class="fas fa-download" style="color:var(--primary);"></i> 仅下载
+                                    </button>
+                                    <button class="btn btn-primary" id="installNowBtn" onclick="installNow()" style="display:none;">
+                                        <i class="fas fa-play"></i> 立即安装
+                                    </button>
+                                </div>
+                                <a id="updateHtmlUrl" href="#" target="_blank" style="font-size:13px; color:var(--primary); text-decoration:none; margin-top:6px; display:inline-block;">
                                     <i class="fab fa-github"></i> 在 GitHub 查看
                                 </a>
                             </div>
@@ -2672,6 +2757,7 @@
             }
             
             document.getElementById('updateHtmlUrl').href = data.html_url || '#';
+
             // MD5 信息
             const md5El = document.getElementById('updateMd5Info');
             const md5Text = document.getElementById('updateMd5Text');
@@ -2681,7 +2767,40 @@
             } else {
                 md5El.style.display = 'none';
             }
+
+            // 已下载缓存徽标与按钮状态
+            _refreshDownloadedUI(data.is_downloaded, data.md5_verified);
+
             document.getElementById('updateInfo').style.display = 'block';
+        }
+
+        function _refreshDownloadedUI(isDownloaded, md5Verified) {
+            const cachedBadge = document.getElementById('updateCachedBadge');
+            const cachedBadgeText = document.getElementById('updateCachedBadgeText');
+            const dlAndInstallBtn = document.getElementById('downloadAndInstallBtn');
+            const dlOnlyBtn = document.getElementById('downloadOnlyBtn');
+            const installNowBtn = document.getElementById('installNowBtn');
+
+            if (isDownloaded) {
+                // 显示已下载徽标
+                cachedBadge.style.display = 'inline-flex';
+                if (md5Verified) {
+                    cachedBadge.className = 'update-cached-badge verified';
+                    cachedBadgeText.textContent = '已下载 (MD5 校验通过)';
+                } else {
+                    cachedBadge.className = 'update-cached-badge unverified';
+                    cachedBadgeText.textContent = '已下载 (无 MD5 校验信息)';
+                }
+                // 切换按钮：仅显示"立即安装"
+                dlAndInstallBtn.style.display = 'none';
+                dlOnlyBtn.style.display = 'none';
+                installNowBtn.style.display = '';
+            } else {
+                cachedBadge.style.display = 'none';
+                dlAndInstallBtn.style.display = '';
+                dlOnlyBtn.style.display = '';
+                installNowBtn.style.display = 'none';
+            }
         }
 
         async function loadUpdateStatus() {
@@ -2976,62 +3095,171 @@
             }
         }
 
-        async function applyUpdate() {
-            if (!_pendingUpdate) return;
+        // ── 倒计时状态 ──
+        let _countdownTimer = null;
+        let _countdownVersion = null;
 
+        function _setDownloadBtnsLoading(loading) {
+            const dlAndInstallBtn = document.getElementById('downloadAndInstallBtn');
+            const dlOnlyBtn = document.getElementById('downloadOnlyBtn');
+            const installNowBtn = document.getElementById('installNowBtn');
+            if (loading) {
+                dlAndInstallBtn.disabled = true;
+                dlOnlyBtn.disabled = true;
+                installNowBtn.disabled = true;
+            } else {
+                dlAndInstallBtn.disabled = false;
+                dlOnlyBtn.disabled = false;
+                installNowBtn.disabled = false;
+            }
+        }
+
+        async function _doDownload() {
+            if (!_pendingUpdate) return null;
             const useMirror = document.getElementById('useMirrorToggle').checked;
-            const mirrorInfo = useMirror
-                ? `<br><span style="font-size:12px;color:#888;">将通过镜像源加速下载，失败自动回退直连</span>`
-                : `<br><span style="font-size:12px;color:#888;">将直连 GitHub 下载</span>`;
-
-            if (!await showConfirm('确认更新',
-                `确定要更新到 <strong>${_pendingUpdate.remote_version}</strong> 吗？<br>` +
-                `<span style="font-size:13px;color:#666;">更新前会自动备份数据库。更新完成后服务将自动重启。</span>` +
-                mirrorInfo
-            )) return;
-
-            const applyBtn = document.getElementById('applyUpdateBtn');
-            applyBtn.disabled = true;
-            applyBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在更新...';
 
             document.getElementById('updateProgress').style.display = 'block';
             const progressBar = document.getElementById('updateProgressBar');
             const progressText = document.getElementById('updateProgressText');
-
             progressBar.style.width = '10%';
             progressText.textContent = useMirror ? '正在通过镜像源下载更新包...' : '正在直连 GitHub 下载更新包...';
+            _setDownloadBtnsLoading(true);
 
             try {
-                const response = await fetch('/api/update/apply', {
+                const response = await fetch('/api/update/download', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ use_mirror: useMirror })
                 });
+                progressBar.style.width = '70%';
+                progressText.textContent = '正在校验 MD5...';
+
+                const res = await response.json();
+                if (!response.ok) {
+                    showToast(res.message || '下载失败', 'error');
+                    progressBar.style.width = '0%';
+                    document.getElementById('updateProgress').style.display = 'none';
+                    _setDownloadBtnsLoading(false);
+                    return null;
+                }
+
+                progressBar.style.width = '100%';
+                progressText.textContent = `下载完成，MD5 校验${res.data.md5_verified ? '通过' : '（无校验信息）'}`;
+
+                // 更新缓存徽标
+                _refreshDownloadedUI(true, res.data.md5_verified);
+
+                return res.data;
+            } catch (e) {
+                showToast('下载失败，请确认网络连接', 'error');
+                document.getElementById('updateProgress').style.display = 'none';
+                _setDownloadBtnsLoading(false);
+                return null;
+            }
+        }
+
+        async function downloadOnly() {
+            const result = await _doDownload();
+            if (!result) return;
+            showToast(`版本 ${result.version} 下载完成，MD5 ${result.md5_verified ? '校验通过 ✓' : '（无校验信息）'}`, 'success');
+            _setDownloadBtnsLoading(false);
+        }
+
+        async function downloadAndInstall() {
+            const result = await _doDownload();
+            if (!result) return;
+
+            // 启动5秒倒计时
+            _countdownVersion = result.version;
+            const countdownBar = document.getElementById('updateCountdownBar');
+            const countdownSec = document.getElementById('countdownSec');
+            const countdownFill = document.getElementById('countdownFill');
+            countdownBar.style.display = 'block';
+            _setDownloadBtnsLoading(false);
+
+            let remaining = 5;
+            countdownSec.textContent = remaining;
+            countdownFill.style.transition = 'none';
+            countdownFill.style.width = '100%';
+
+            _countdownTimer = setInterval(async () => {
+                remaining--;
+                countdownSec.textContent = remaining;
+                countdownFill.style.transition = 'width 1s linear';
+                countdownFill.style.width = `${(remaining / 5) * 100}%`;
+
+                if (remaining <= 0) {
+                    clearInterval(_countdownTimer);
+                    _countdownTimer = null;
+                    countdownBar.style.display = 'none';
+                    if (_countdownVersion) {
+                        await _doInstall(_countdownVersion);
+                    }
+                }
+            }, 1000);
+        }
+
+        function cancelAutoInstall() {
+            if (_countdownTimer) {
+                clearInterval(_countdownTimer);
+                _countdownTimer = null;
+            }
+            _countdownVersion = null;
+            document.getElementById('updateCountdownBar').style.display = 'none';
+            showToast('已取消自动安装，可稍后点击「立即安装」手动更新', 'info');
+        }
+
+        async function installNow() {
+            if (!_pendingUpdate) return;
+            if (!await showConfirm('确认安装',
+                `确定要安装 <strong>${_pendingUpdate.remote_version}</strong> 吗？<br>` +
+                `<span style="font-size:13px;color:#666;">安装前会自动备份数据库，完成后服务将自动重启。</span>`
+            )) return;
+            await _doInstall(_pendingUpdate.remote_version);
+        }
+
+        async function _doInstall(version) {
+            document.getElementById('updateProgress').style.display = 'block';
+            const progressBar = document.getElementById('updateProgressBar');
+            const progressText = document.getElementById('updateProgressText');
+            progressBar.style.width = '20%';
+            progressText.textContent = '正在从本地缓存安装...';
+            _setDownloadBtnsLoading(true);
+
+            try {
+                const response = await fetch('/api/update/install', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ version })
+                });
 
                 progressBar.style.width = '80%';
-                progressText.textContent = '正在解压并安装...';
+                progressText.textContent = '正在解压并替换文件...';
 
                 const res = await response.json();
 
                 if (!response.ok) {
-                    showToast(res.message || '更新失败', 'error');
+                    showToast(res.message || '安装失败', 'error');
                     progressBar.style.width = '0%';
                     document.getElementById('updateProgress').style.display = 'none';
-                    applyBtn.disabled = false;
-                    applyBtn.innerHTML = '<i class="fas fa-download"></i> 下载并安装更新';
+                    _setDownloadBtnsLoading(false);
                     return;
                 }
 
                 progressBar.style.width = '100%';
-                const srcDesc = res.data?.source ? `（来源: ${res.data.source}）` : '';
-                progressText.textContent = `更新完成${srcDesc}，服务正在重启...`;
-                setTimeout(() => waitForRestart(_pendingUpdate.remote_version), 3000);
+                progressText.textContent = '安装完成，服务正在重启...';
+                setTimeout(() => waitForRestart(version), 3000);
 
             } catch (e) {
                 progressBar.style.width = '100%';
                 progressText.textContent = '服务正在重启，请稍候...';
-                setTimeout(() => waitForRestart(_pendingUpdate.remote_version), 3000);
+                setTimeout(() => waitForRestart(version), 3000);
             }
+        }
+
+        // 向后兼容（旧 applyUpdate 调用入口）
+        async function applyUpdate() {
+            await downloadAndInstall();
         }
 
         function normalizeVersion(version) {

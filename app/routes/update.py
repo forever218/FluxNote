@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 update_bp = Blueprint('update', __name__)
 
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+UPDATE_CACHE_DIR = os.path.join(_BASE_DIR, 'data', 'updates')
 
 PRESERVE_PATHS = {'data', 'uploads', 'venv', '.venv', '.env', '.git', 'migrations',
                   '__pycache__', '.cursor', '.vscode', '.idea', 'settings.json'}
@@ -193,6 +194,44 @@ def _verify_md5(content: bytes, expected_md5: str) -> bool:
     """校验文件内容 MD5"""
     actual = hashlib.md5(content).hexdigest().lower()
     return actual == expected_md5.lower()
+
+
+def _get_cached_zip_path(version: str) -> str:
+    """返回指定版本 ZIP 缓存文件的完整路径"""
+    tag = version.lstrip('vV')
+    return os.path.join(UPDATE_CACHE_DIR, f'fluxnote-v{tag}.zip')
+
+
+def _check_local_cache(version: str, expected_md5: str | None) -> tuple[bool, bool]:
+    """
+    检测本地是否已缓存该版本包，并可选地验证 MD5。
+    返回 (is_downloaded, md5_verified)
+    """
+    zip_path = _get_cached_zip_path(version)
+    if not os.path.exists(zip_path):
+        return False, False
+    if not expected_md5:
+        return True, False
+    try:
+        with open(zip_path, 'rb') as f:
+            content = f.read()
+        return True, _verify_md5(content, expected_md5)
+    except Exception:
+        return True, False
+
+
+def _cleanup_old_caches(current_version: str):
+    """清理 UPDATE_CACHE_DIR 中不属于 current_version 的旧 ZIP 包"""
+    if not os.path.isdir(UPDATE_CACHE_DIR):
+        return
+    keep = os.path.basename(_get_cached_zip_path(current_version))
+    for fname in os.listdir(UPDATE_CACHE_DIR):
+        if fname.endswith('.zip') and fname != keep:
+            try:
+                os.remove(os.path.join(UPDATE_CACHE_DIR, fname))
+                logger.info(f'Removed old update cache: {fname}')
+            except Exception:
+                pass
 
 
 # 后台更新任务状态（进程内单例）
@@ -418,6 +457,8 @@ def check_update():
     download_url = _get_download_url(release, repo)
     md5_hash, md5_source = _extract_md5(release)
 
+    is_downloaded, md5_verified = _check_local_cache(remote_tag, md5_hash)
+
     return api_response(data={
         'has_update': has_update,
         'local_version': get_app_version(),
@@ -430,6 +471,8 @@ def check_update():
         'html_url': release.get('html_url', ''),
         'md5': md5_hash,
         'md5_source': md5_source,
+        'is_downloaded': is_downloaded,
+        'md5_verified': md5_verified,
     })
 
 
@@ -583,6 +626,201 @@ def apply_update():
         return api_response(code=500, message=f'更新失败: {str(e)}')
 
 
+@update_bp.route('/api/update/download', methods=['POST'])
+@login_required
+def download_update():
+    """仅下载更新包并缓存到本地，不安装。下载完成后立即进行 MD5 校验。"""
+    data = request.json or {}
+    client_use_mirror = data.get('use_mirror', None)
+
+    repo = _github_repo()
+    if not repo:
+        return api_response(code=400, message='未配置 GitHub 仓库')
+
+    token = Config.get('github_token', '').strip() or None
+    resp = _github_api(f'/repos/{repo}/releases/latest', token)
+    if resp.status_code == 404:
+        return api_response(code=404, message='未找到任何 Release')
+    if resp.status_code == 403:
+        return api_response(code=403, message='GitHub API 速率限制，请稍后再试或配置 Token')
+    if resp.status_code != 200:
+        return api_response(code=502, message=f'获取 Release 信息失败 (HTTP {resp.status_code})')
+
+    release = resp.json()
+    target_version = release.get('tag_name', '')
+    download_url = _get_download_url(release, repo)
+    expected_md5, _ = _extract_md5(release)
+    expected_md5 = (expected_md5 or '').lower()
+
+    if not download_url:
+        return api_response(code=500, message='无法从 Release 获取下载地址')
+
+    use_mirror, mirrors, timeout = _get_mirror_config()
+    if client_use_mirror is not None:
+        use_mirror = bool(client_use_mirror)
+
+    _append_update_log(f'开始下载 {target_version}（仅下载，不安装）...')
+
+    try:
+        _append_update_log(f'正在下载更新包（{"使用镜像" if use_mirror else "直连 GitHub"}）...')
+        content, source = _download_with_mirrors(
+            download_url, use_mirror, mirrors, timeout, log_fn=_append_update_log
+        )
+        _append_update_log(f'下载完成，来源: {source}，大小: {len(content) // 1024} KB')
+
+        # MD5 校验
+        md5_verified = False
+        actual_md5 = hashlib.md5(content).hexdigest()
+        if expected_md5:
+            _append_update_log(f'正在验证 MD5: {expected_md5}')
+            if _verify_md5(content, expected_md5):
+                md5_verified = True
+                _append_update_log('MD5 校验通过')
+            else:
+                _append_update_log(f'MD5 校验失败! 期望: {expected_md5}, 实际: {actual_md5}')
+                return api_response(code=500, message=f'MD5 校验失败，下载已中止。期望: {expected_md5}, 实际: {actual_md5}')
+        else:
+            _append_update_log('无 MD5 校验信息，已跳过完整性验证')
+
+        # 保存到缓存目录
+        os.makedirs(UPDATE_CACHE_DIR, exist_ok=True)
+        zip_path = _get_cached_zip_path(target_version)
+        with open(zip_path, 'wb') as f:
+            f.write(content)
+        _append_update_log(f'安装包已缓存: {os.path.basename(zip_path)}')
+
+        # 清理旧版本缓存
+        _cleanup_old_caches(target_version)
+
+        return api_response(data={
+            'version': target_version,
+            'source': source,
+            'size_kb': len(content) // 1024,
+            'md5': actual_md5,
+            'md5_verified': md5_verified,
+        })
+
+    except Exception as e:
+        _append_update_log(f'下载失败: {str(e)}')
+        logger.exception('Download failed')
+        return api_response(code=500, message=f'下载失败: {str(e)}')
+
+
+@update_bp.route('/api/update/install', methods=['POST'])
+@login_required
+def install_update():
+    """从本地缓存安装已下载的更新包"""
+    data = request.json or {}
+    target_version = data.get('version', '').strip()
+
+    if not target_version:
+        return api_response(code=400, message='缺少 version 参数')
+
+    zip_path = _get_cached_zip_path(target_version)
+    if not os.path.exists(zip_path):
+        return api_response(code=404, message='本地未找到该版本的安装包，请先下载')
+
+    _append_update_log(f'开始从本地缓存安装 {target_version}...')
+
+    try:
+        with open(zip_path, 'rb') as f:
+            content = f.read()
+        _append_update_log(f'读取本地包: {os.path.basename(zip_path)}，大小: {len(content) // 1024} KB')
+
+        # 备份数据库
+        db_path = os.path.join(_BASE_DIR, 'data', 'notes.db')
+        if os.path.exists(db_path):
+            backup_name = f'notes_backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.db'
+            backup_path = os.path.join(_BASE_DIR, 'data', backup_name)
+            shutil.copy2(db_path, backup_path)
+            _append_update_log(f'数据库已备份: {backup_name}')
+
+        # 解压到临时目录
+        _append_update_log('正在解压...')
+        tmp_dir = tempfile.mkdtemp(prefix='fluxnote_update_')
+        zip_tmp = os.path.join(tmp_dir, 'release.zip')
+        try:
+            with open(zip_tmp, 'wb') as f:
+                f.write(content)
+            with zipfile.ZipFile(zip_tmp, 'r') as zf:
+                zf.extractall(tmp_dir)
+        except zipfile.BadZipFile:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            _append_update_log('解压失败: 文件损坏或不是有效的 ZIP，请重新下载')
+            return api_response(code=500, message='解压失败: 安装包已损坏，请重新下载')
+
+        extracted_dirs = [d for d in os.listdir(tmp_dir) if os.path.isdir(os.path.join(tmp_dir, d))]
+        if not extracted_dirs:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            _append_update_log('解压失败: 找不到内容目录')
+            return api_response(code=500, message='解压失败: ZIP 内容为空')
+
+        source_dir = os.path.join(tmp_dir, extracted_dirs[0])
+
+        # 复制文件（跳过需要保留的目录）
+        _append_update_log('正在替换文件...')
+        updated_count = 0
+        for item in os.listdir(source_dir):
+            if item in PRESERVE_PATHS:
+                continue
+            src = os.path.join(source_dir, item)
+            dst = os.path.join(_BASE_DIR, item)
+            if os.path.isdir(src):
+                if os.path.exists(dst):
+                    shutil.copytree(src, dst, dirs_exist_ok=True)
+                else:
+                    shutil.copytree(src, dst)
+            else:
+                shutil.copy2(src, dst)
+            updated_count += 1
+
+        _append_update_log(f'已替换 {updated_count} 个文件/目录')
+
+        # 安装依赖
+        req_file = os.path.join(_BASE_DIR, 'requirements.txt')
+        if os.path.exists(req_file):
+            _append_update_log('正在安装依赖...')
+            try:
+                subprocess.run(
+                    [sys.executable, '-m', 'pip', 'install', '-r', req_file, '--quiet'],
+                    cwd=_BASE_DIR, timeout=300, capture_output=True
+                )
+                _append_update_log('依赖安装完成')
+            except subprocess.TimeoutExpired:
+                _append_update_log('依赖安装超时，请手动运行 pip install -r requirements.txt')
+            except Exception as e:
+                _append_update_log(f'依赖安装异常: {e}')
+
+        # 清理临时目录和缓存包
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        try:
+            os.remove(zip_path)
+            _append_update_log('已清理安装包缓存')
+        except Exception:
+            pass
+
+        _append_update_log(f'安装完成! 版本: {target_version}，服务即将重启...')
+
+        def _delayed_restart():
+            time.sleep(2)
+            logger.info('Restarting application after install...')
+            os.execv(sys.executable, [sys.executable] + sys.argv)
+
+        threading.Thread(target=_delayed_restart, daemon=True).start()
+
+        return api_response(data={
+            'success': True,
+            'version': target_version,
+            'message': '安装完成，服务正在重启...',
+            'restarting': True,
+        })
+
+    except Exception as e:
+        _append_update_log(f'安装失败: {str(e)}')
+        logger.exception('Install failed')
+        return api_response(code=500, message=f'安装失败: {str(e)}')
+
+
 @update_bp.route('/api/update/logs', methods=['GET'])
 @login_required
 def get_update_logs():
@@ -632,6 +870,7 @@ def _do_background_check(app):
                             has_update = bool(remote_ver and local_ver and remote_ver > local_ver)
                             download_url = _get_download_url(release, repo)
                             md5_hash, _ = _extract_md5(release)
+                            is_downloaded, md5_verified = _check_local_cache(remote_tag, md5_hash)
                             Config.set('update_check_cache', json.dumps({
                                 'has_update': has_update,
                                 'local_version': get_app_version(),
@@ -643,6 +882,8 @@ def _do_background_check(app):
                                 'zip_url': download_url,
                                 'html_url': release.get('html_url', ''),
                                 'md5': md5_hash,
+                                'is_downloaded': is_downloaded,
+                                'md5_verified': md5_verified,
                                 'checked_at': datetime.now().isoformat(),
                             }))
                             logger.info(f'Background update check done: has_update={has_update}, remote={remote_tag}')
