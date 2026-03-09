@@ -26,6 +26,7 @@ import { initMarkdownRenderer, initThemePlugins } from '/static/js/markdown-rend
 
 class ThemeSDK {
     constructor() {
+        this._initialized = false;
         this.options = {
             contentSelector: '.blog-main', // 默认容器选择器
             navSelector: null,             // 默认导航选择器
@@ -45,6 +46,9 @@ class ThemeSDK {
      * 初始化主题核心能力
      */
     init(options = {}) {
+        if (this._initialized) return;
+        this._initialized = true;
+
         this.options = { ...this.options, ...options };
 
         // 1. 初始化渲染配置
@@ -127,7 +131,6 @@ class ThemeSDK {
      * @param {string} baseUrl 跳转的基础路径
      */
     bindSearch(selector = '#searchInput', baseUrl = '/') {
-        // 健壮性检查：如果页面上没有搜索框，不执行绑定
         if (!document.querySelector(selector)) return;
 
         document.addEventListener('keypress', (e) => {
@@ -146,7 +149,6 @@ class ThemeSDK {
      * @param {string} baseUrl 跳转的基础路径 (默认 /tags/)
      */
     bindTagClicks(selector = '.note-tag[data-tag]', baseUrl = '/tags/') {
-        // 健壮性检查
         if (!document.querySelector(selector)) return;
 
         document.addEventListener('click', (e) => {

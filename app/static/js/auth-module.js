@@ -34,6 +34,8 @@ class AuthModule {
      * @param {string} options.modalContainer - 模态框容器选择器（可选，默认创建）
      */
     init(options = {}) {
+        if (this.isInitialized) return;
+
         this.onLoginSuccess = options.onSuccess || (() => window.location.reload());
 
         if (options.modalContainer) {

@@ -320,6 +320,9 @@ class SPALoader {
         const baseUrl = window.location.origin;
 
         bodyScripts.forEach(script => {
+            // data-spa-once: 全局初始化脚本，首屏已执行，SPA 导航时跳过
+            if (script.hasAttribute('data-spa-once')) return;
+
             // 检查脚本是否在主内容区域内
             let isInMainContent = false;
             for (const selector of mainContentSelectors) {

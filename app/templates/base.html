@@ -43,8 +43,8 @@
     <script src={{ static_v("lib/viewerjs/viewer.min.js") }}></script>
     <!-- Mermaid - 懒加载，不再首屏同步加载 -->
 
-    <!-- Theme SDK 入口 -->
-    <script type="module">
+    <!-- Theme SDK 入口 (data-spa-once: SPA 导航时不重复执行) -->
+    <script type="module" data-spa-once>
         import themeSDK from '/static/js/theme-sdk.js?v={{ app_version }}';
         window.themeSDK = themeSDK; // 暴露给全局，方便调试或特殊调用
         

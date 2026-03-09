@@ -465,6 +465,40 @@ window.addEventListener('theme-ready', () => {
 - 内联脚本放在内容区域内
 - 或者放在 `{% block scripts %}` 中
 
+### Q: SPA 导航后事件处理器失效或重复触发？
+
+**原因**：SPA 导航时，`{% block scripts %}` 中的内联脚本会**每次重新执行**。如果脚本中用 `addEventListener` 注册了持久事件监听器，这些监听器会不断累积，导致回调执行多次或互相抵消。
+
+**正确做法**：在 `{% block scripts %}` 中直接调用初始化函数，不要用 `addEventListener`：
+
+```javascript
+{%- raw %}
+{% block scripts %}
+<script type="module">
+    import { renderContent } from '/static/js/markdown-renderer.js';
+
+    function initPage() {
+        // 页面初始化逻辑
+    }
+
+    // ✅ 正确：直接调用，SPA 每次导航会重新执行此脚本
+    initPage();
+
+    // ❌ 错误：addEventListener 会在每次 SPA 导航时累积
+    // window.addEventListener('page-ready', initPage);
+</script>
+{% endblock %}
+{%- endraw %}
+```
+
+**全局初始化脚本**（只需执行一次的）应添加 `data-spa-once` 属性，SPA 导航时会自动跳过：
+
+```html
+<script type="module" data-spa-once>
+    // 此脚本只在首次页面加载时执行，SPA 导航不会重复执行
+</script>
+```
+
 ### Q: 样式丢失？
 
 **原因**：SPA 不会重新加载 CSS。
@@ -506,11 +540,18 @@ window.addEventListener('theme-ready', () => {
    <a href="#" data-auth-action="login">登录</a>
    ```
 
-3. **监听 `spa-loaded` 事件重新初始化组件**
+3. **页面脚本直接调用，不用 `addEventListener`**
    ```javascript
-   window.addEventListener('spa-loaded', () => {
-       // 重新初始化自定义组件
-   });
+   // 在 {% block scripts %} 中直接调用初始化函数
+   // SPA 导航会自动重新执行此脚本
+   initPage();
+   ```
+
+4. **全局初始化脚本标记 `data-spa-once`**
+   ```html
+   <script type="module" data-spa-once>
+       // 只在首屏加载时执行一次
+   </script>
    ```
 
 4. **使用 `themeSDK.navigate()` 而非直接修改 `location.href`**
