@@ -1,0 +1,102 @@
+{
+  "name": "行云2.0",
+  "description": "基于行云主题的二次开发，提高了卡片密度",
+  "author": "LSR",
+  "preview": {
+    "type": "image",
+    "value": "/theme/spa/static/img/preview.jpg"
+  },
+  "primary_color": "#10B981",
+  "is_writer": true,
+  "settings": [
+    {
+      "group": "layout",
+      "label": "布局设置",
+      "fields": [
+        {
+          "name": "sidebar_collapsed",
+          "label": "侧边栏默认收起",
+          "type": "switch",
+          "default": false,
+          "description": "开启后，页面加载时侧边栏默认为收起状态"
+        },
+        {
+          "name": "tags_limit",
+          "label": "标签显示数量",
+          "type": "number",
+          "default": 15,
+          "validation": {
+            "min": 5,
+            "max": 30
+          },
+          "description": "侧边栏显示的标签数量，建议 10-20 个"
+        }
+      ]
+    },
+    {
+      "group": "display",
+      "label": "显示设置",
+      "fields": [
+        {
+          "name": "show_stats",
+          "label": "显示统计面板",
+          "type": "switch",
+          "default": true,
+          "description": "在侧边栏显示笔记数、标签数、活跃天数等统计信息"
+        },
+        {
+          "name": "show_heatmap",
+          "label": "显示活跃热力图",
+          "type": "switch",
+          "default": true,
+          "description": "在统计面板下方显示活动热力图"
+        },
+        {
+          "name": "show_tags_section",
+          "label": "显示标签列表",
+          "type": "switch",
+          "default": true,
+          "description": "在侧边栏显示热门标签列表"
+        }
+      ]
+    },
+    {
+      "group": "style",
+      "label": "样式设置",
+      "fields": [
+        {
+          "name": "primary_color",
+          "label": "主题色",
+          "type": "color",
+          "default": "#10B981",
+          "description": "主题的主要颜色，影响链接、按钮等元素"
+        },
+        {
+          "name": "card_style",
+          "label": "主页文章卡片样式",
+          "type": "select",
+          "default": "standard",
+          "options": [
+            {
+              "value": "standard",
+              "label": "整齐样式"
+            },
+            {
+              "value": "masonry",
+              "label": "随机大小卡片"
+            }
+          ],
+          "description": "选择主页文章卡片的显示样式，整齐样式为统一大小的卡片，随机大小卡片为不同高度的卡片自动平铺"
+        },
+        {
+          "name": "custom_css",
+          "label": "自定义CSS",
+          "type": "code",
+          "default": "",
+          "placeholder": "/* 在此输入自定义CSS代码 */",
+          "description": "添加自定义CSS以覆盖主题默认样式"
+        }
+      ]
+    }
+  ]
+}
