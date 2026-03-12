@@ -1,0 +1,169 @@
+{% extends "themes/spa2/base.html" %}
+{% from "macros/meta.html" import seo_meta %}
+{% from "macros/pagination.html" import render_pagination %}
+
+{% block meta %}
+{{ seo_meta(site_title, site_desc, 'website') }}
+{% endblock %}
+
+{% block title %}{{ site_title }} - {{ site_desc }}{% endblock %}
+
+{% block content %}
+<!-- 手机端顶部(仅移动端显示) -->
+<div class="mobile-brand-bar">
+    <div class="mobile-brand-info">
+        <h1 class="mobile-brand-title">{{ site_title }}</h1>
+        <p class="mobile-brand-desc">{{ site_desc }}</p>
+    </div>
+    <div class="mobile-stats-mini">
+        <span class="stat-mini-item"><strong>{{ stats.notes if stats else 0 }}</strong> 篇</span>
+        <span class="stat-mini-item"><strong>{{ stats.tags if stats else 0 }}</strong> 标签</span>
+    </div>
+</div>
+
+<!-- 顶部栏 -->
+<header class="main-header">
+    <div class="header-left">
+        <button id="mobileMenuBtn" class="mobile-menu-btn" title="菜单"><i class="fas fa-bars"></i></button>
+        <span id="currentDateDisplay">{{ today }}</span>
+    </div>
+    <div class="header-search">
+        <i class="fas fa-search"></i>
+        <input type="text" id="searchInput" placeholder="搜索..." value="{{ search }}">
+    </div>
+</header>
+
+<!-- 筛选状态提示 -->
+{% if current_date %}
+<div class="filter-banner">
+    <span><i class="far fa-calendar-check"></i> 正在查看 <b>{{ current_date }}</b> 的笔记</span>
+    <a href="{{ url_for('blog.index') }}" class="clear-filter-btn" title="清除筛选"><i class="fas fa-times"></i></a>
+</div>
+{% endif %}
+
+{% if search %}
+<div class="filter-banner">
+    <span><i class="fas fa-search"></i> 搜索结果：<b>{{ search }}</b></span>
+    <a href="{{ url_for('blog.index') }}" class="clear-filter-btn" title="清除搜索"><i class="fas fa-times"></i></a>
+</div>
+{% endif %}
+
+<!-- 笔记流 -->
+<div id="notesList" class="notes-stream{% if theme_config.card_style == 'masonry' %} masonry-layout{% endif %}">
+    {% if notes %}
+        {% for note in notes %}
+        <div class="note-card" data-note-id="{{ note.id }}">
+            <div class="note-header-row">
+                 <div class="note-meta-left">
+                    <span class="note-date-badge" data-timestamp="{{ note.created_at.isoformat() }}">{{ note.created_at.strftime('%m-%d') }}</span>
+                    <span class="note-time-label">{{ note.created_at.strftime('%H:%M') }}</span>
+                 </div>
+                 <div class="note-actions-right">
+                    <a href="{{ url_for('blog.post', note_id=note.id) }}" class="permalink-btn" title="查看详情"><i class="fas fa-external-link-alt"></i></a>
+                 </div>
+            </div>
+
+            <!-- 原始内容存储 (Hidden) -->
+            <script type="text/markdown" id="raw-content-{{ note.id }}">{{ note.content }}</script>
+            
+            <div class="note-content-wrapper">
+                <div class="note-content markdown-body" id="note-render-{{ note.id }}">
+                    <div class="loading-placeholder">
+                        <i class="fas fa-spinner fa-spin"></i> 加载中...
+                    </div>
+                </div>
+            </div>
+            
+            {% if note.tags_list %}
+            <div class="note-footer">
+                <div class="note-tags">
+                    {% for tag in note.tags_list %}
+                    <span class="note-tag" data-tag="{{ tag.name }}">#{{ tag.name }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="note-card empty-card">
+            <div class="empty-state">
+                <i class="far fa-file-alt"></i>
+                <p>{% if search or current_date %}没有找到匹配的笔记{% else %}暂无公开笔记{% endif %}</p>
+                {% if search or current_date %}
+                <a href="{{ url_for('blog.index') }}" class="btn-reset">返回首页</a>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<!-- 分页 -->
+{% if total_pages > 1 %}
+{{ render_pagination(page, total_pages, 'blog.index', search=search, date=current_date, nav_class='pagination-nav', btn_class='pagination-btn', info_class='pagination-info') }}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+    import { renderContent } from '/static/js/markdown-renderer.js?v={{ app_version }}';
+
+// 渲染所有笔记内容 (SPA 特有的前端异步加载渲染)
+async function renderAllNotes() {
+    const notes = document.querySelectorAll('.note-card[data-note-id]');
+    for (const note of notes) {
+        const id = note.dataset.noteId;
+        const rawContainer = document.getElementById(`raw-content-${id}`);
+        const targetContainer = document.getElementById(`note-render-${id}`);
+
+        // 检查所有必需元素是否存在
+        if (!rawContainer || !targetContainer) continue;
+
+        // 检查元素是否仍在文档中（SPA 切换时可能已被移除）
+        if (!document.body.contains(rawContainer) || !document.body.contains(targetContainer)) {
+            continue;
+        }
+
+        const content = rawContainer.textContent;
+
+        try {
+            await renderContent(targetContainer, content, {
+                skipFirstH1: true,
+                enableViewer: true,
+                enableMermaid: true,
+                enableHighlight: true
+            });
+        } catch (e) {
+            console.error(`Failed to render note ${id}:`, e);
+        }
+    }
+}
+
+// 暴露 toggleNote 到全局 (UI 展现逻辑)
+window.toggleNote = function(id) {
+    const wrapper = document.getElementById(`note-render-${id}`).parentElement;
+    const overlay = document.getElementById(`overlay-${id}`);
+    const btn = overlay.querySelector('.read-more-btn');
+
+    if (wrapper.classList.contains('collapsed')) {
+        wrapper.classList.remove('collapsed');
+        wrapper.classList.add('expanded');
+        btn.innerHTML = '<i class="fas fa-chevron-up"></i> 收起';
+        overlay.classList.add('expanded-mode');
+    } else {
+        wrapper.classList.add('collapsed');
+        wrapper.classList.remove('expanded');
+        btn.innerHTML = '<i class="fas fa-chevron-down"></i> 展开全文';
+        overlay.classList.remove('expanded-mode');
+        wrapper.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+}
+
+// 页面初始化
+function initPage() {
+    renderAllNotes();
+}
+
+initPage();
+</script>
+{% endblock %}
