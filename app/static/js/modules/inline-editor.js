@@ -7,19 +7,23 @@ export const inlineEditor = {
     originalContent: null,
     originalTags: [],
     isEditing: false,
+    isOpening: false,
     editorElement: null,
     tags: [],
 
     async open(noteId) {
-        if (this.isEditing) {
-            showToast('请先保存或取消当前编辑');
+        if (this.isEditing || this.isOpening) {
+            if (this.isEditing) showToast('请先保存或取消当前编辑');
             return;
         }
+
+        this.isOpening = true;
 
         this.currentNoteId = noteId;
         const noteCard = document.querySelector(`.note-card[data-note-id="${noteId}"]`);
         if (!noteCard) {
             showToast('未找到文章');
+            this.isOpening = false;
             return;
         }
 
@@ -50,6 +54,7 @@ export const inlineEditor = {
         // 创建编辑器
         this.createEditor(noteCard);
         this.isEditing = true;
+        this.isOpening = false;
     },
 
     createEditor(noteCard) {
@@ -102,7 +107,7 @@ export const inlineEditor = {
                     </div>
                 </div>
             </div>
-            <textarea class="inline-editor-textarea" placeholder="开始编辑...">${this.originalContent}</textarea>
+            <textarea class="inline-editor-textarea" placeholder="开始编辑..."></textarea>
             <div class="inline-tags-area">
                 <div class="inline-tags-list"></div>
                 <input type="text" class="inline-tag-input" placeholder="输入标签按回车添加...">
@@ -128,6 +133,7 @@ export const inlineEditor = {
 
         this.editorElement = editorContainer;
         const textarea = editorContainer.querySelector('.inline-editor-textarea');
+        textarea.value = this.originalContent;
 
         // 渲染标签
         this.renderTags();
@@ -259,14 +265,14 @@ export const inlineEditor = {
 
         try {
             const response = await api.notes.update(this.currentNoteId, {
-                content: content,
+                content: textarea.value,
                 tags: this.tags,
                 is_public: isPublic
             });
 
             if (response && response.ok) {
                 // 更新原始内容
-                this.originalContent = content;
+                this.originalContent = textarea.value;
                 this.originalTags = [...this.tags];
 
                 // 更新显示
@@ -274,12 +280,12 @@ export const inlineEditor = {
                 const rawContent = document.getElementById(`raw-content-${this.currentNoteId}`);
 
                 if (rawContent) {
-                    rawContent.textContent = content;
+                    rawContent.textContent = textarea.value;
                 }
 
                 // 重新渲染Markdown
                 if (typeof marked !== 'undefined' && noteContent) {
-                    const html = marked.parse(content);
+                    const html = marked.parse(textarea.value);
                     // 使用DOMPurify清理HTML
                     if (typeof DOMPurify !== 'undefined') {
                         noteContent.innerHTML = DOMPurify.sanitize(html);
