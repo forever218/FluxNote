@@ -73,6 +73,9 @@ export const inlineEditor = {
             noteFooter.style.display = 'none';
         }
 
+        // 标记编辑状态
+        noteCard.classList.add('editing');
+
         // 创建编辑器容器，插入到noteCard中
         const editorContainer = document.createElement('div');
         editorContainer.className = 'inline-editor-container';
@@ -332,7 +335,9 @@ export const inlineEditor = {
             }
         }
 
-        // 移除编辑器
+        // 移除编辑状态标记和编辑器
+        const editingCard = this.editorElement.closest('.note-card');
+        if (editingCard) editingCard.classList.remove('editing');
         this.editorElement.remove();
         this.editorElement = null;
         this.isEditing = false;
@@ -359,7 +364,9 @@ export const inlineEditor = {
             noteFooter.style.display = '';
         }
 
-        // 移除编辑器
+        // 移除编辑状态标记和编辑器
+        const editingCard = this.editorElement.closest('.note-card');
+        if (editingCard) editingCard.classList.remove('editing');
         this.editorElement.remove();
         this.editorElement = null;
         this.isEditing = false;

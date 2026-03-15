@@ -429,7 +429,7 @@
     background: transparent;
     box-shadow: none;
     margin: 0;
-    padding: 24px 28px;
+    padding: 0;
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -1154,7 +1154,18 @@
 
 .theme-spa .post-article {
     max-width: 100%;
+    margin: 0;
     padding: 24px 28px;
+}
+
+/* 编辑模式：去除卡片装饰，嵌入式全宽编辑器 */
+.theme-spa .note-card.post-article.editing {
+    padding: 12px 0 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+    border-top: 2px solid var(--primary);
 }
 
 .theme-spa .post-article .markdown-body {
@@ -1406,7 +1417,7 @@
 
 /* === 评论区样式 === */
 .theme-spa .comments-section {
-    margin-top: 64px;
+    margin-top: 1rem;
     padding-top: 32px;
     border-top: 2px solid var(--slate-100);
 }
