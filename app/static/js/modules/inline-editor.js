@@ -132,6 +132,17 @@ export const inlineEditor = {
         // 渲染标签
         this.renderTags();
 
+        // 绑定标签删除的事件委托
+        const tagsList = editorContainer.querySelector('.inline-tags-list');
+        tagsList.addEventListener('click', (e) => {
+            if (e.target.classList.contains('inline-tag-remove')) {
+                const tag = e.target.dataset.tag;
+                if (tag) {
+                    this.removeTag(tag);
+                }
+            }
+        });
+
         // 初始化编辑器功能
         editor.init(textarea);
 
@@ -164,12 +175,21 @@ export const inlineEditor = {
     renderTags() {
         if (!this.editorElement) return;
         const tagsList = this.editorElement.querySelector('.inline-tags-list');
-        tagsList.innerHTML = this.tags.map(tag => `
-            <span class="inline-tag">
-                #${tag}
-                <span class="inline-tag-remove" onclick="window.inlineEditor.removeTag('${tag}')">×</span>
-            </span>
-        `).join('');
+        tagsList.innerHTML = '';
+        
+        this.tags.forEach(tag => {
+            const span = document.createElement('span');
+            span.className = 'inline-tag';
+            span.textContent = `#${tag}`;
+            
+            const removeBtn = document.createElement('span');
+            removeBtn.className = 'inline-tag-remove';
+            removeBtn.dataset.tag = tag;
+            removeBtn.textContent = '×';
+            
+            span.appendChild(removeBtn);
+            tagsList.appendChild(span);
+        });
     },
 
     removeTag(tag) {
@@ -279,7 +299,7 @@ export const inlineEditor = {
                 const tagsContainer = document.querySelector('.note-footer .note-tags');
                 if (tagsContainer) {
                     tagsContainer.innerHTML = this.tags.map(tag => 
-                        `<a href="/tags/${tag}" class="note-tag">#${tag}</a>`
+                        `<a href="/tags/${encodeURIComponent(tag)}" class="note-tag">#${tag}</a>`
                     ).join('');
                 }
 
@@ -311,10 +331,13 @@ export const inlineEditor = {
     cancel() {
         if (!this.editorElement) return;
 
+        // 获取关联的笔记卡片，确保恢复操作仅影响当前编辑的卡片
+        const noteCard = this.editorElement.closest('.note-card');
+
         // 恢复原始内容
-        const noteContent = document.querySelector(`#note-render-${this.currentNoteId}`);
-        const noteFooter = document.querySelector('.note-footer');
-        const postHeader = document.querySelector('.post-header');
+        const noteContent = noteCard ? noteCard.querySelector(`#note-render-${this.currentNoteId}`) : null;
+        const noteFooter = noteCard ? noteCard.querySelector('.note-footer') : null;
+        const postHeader = noteCard ? noteCard.querySelector('.post-header') : null;
 
         if (noteContent) {
             noteContent.style.display = '';
@@ -336,8 +359,7 @@ export const inlineEditor = {
         }
 
         // 移除编辑状态标记和编辑器
-        const editingCard = this.editorElement.closest('.note-card');
-        if (editingCard) editingCard.classList.remove('editing');
+        if (noteCard) noteCard.classList.remove('editing');
         this.editorElement.remove();
         this.editorElement = null;
         this.isEditing = false;
